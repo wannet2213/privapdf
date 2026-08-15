@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { createPdfToolkit } from 'pdfstudio';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -408,9 +409,35 @@ describe('compressPdf', () => {
 });
 
 describe('unlockPdf', () => {
-  it('loads encrypted PDF with ignoreEncryption', async () => {
+  it('loads unencrypted PDF unchanged', async () => {
     const input = await makePdf(2);
     const output = await unlockPdf(input);
     expect(await countPages(output)).toBe(2);
   });
+
+  it('removes a user password from an encrypted PDF', async () => {
+    const toolkit = await createPdfToolkit();
+    const plain = await makePdf(2);
+    const locked = await toolkit.lock(new Uint8Array(plain), { userPassword: 'rahasia' });
+
+    // Terkunci: unlock tanpa password harus ditolak.
+    await expect(unlockPdf(toArrayBuffer(locked))).rejects.toThrow(/memerlukan password/i);
+
+    const output = await unlockPdf(toArrayBuffer(locked), 'rahasia');
+    const outBytes = new Uint8Array(output);
+    expect(await countPages(output)).toBe(2);
+    // Hasil harus sudah tidak terenkripsi.
+    await expect(toolkit.isEncrypted(outBytes)).resolves.toBe(false);
+  });
+
+  it('rejects a wrong password', async () => {
+    const toolkit = await createPdfToolkit();
+    const plain = await makePdf(1);
+    const locked = await toolkit.lock(new Uint8Array(plain), { userPassword: 'rahasia' });
+    await expect(unlockPdf(toArrayBuffer(locked), 'salah')).rejects.toThrow(/password salah/i);
+  });
 });
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}

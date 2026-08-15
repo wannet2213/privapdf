@@ -134,6 +134,11 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   const onPointerDown = (e: PointerEvent<HTMLElement>, index: number) => {
     if ((e.target as HTMLElement).closest('button, .merge-delete-btn')) return;
     downRef.current = { index, x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+    // Tangkap pointer sejak awal agar drag tetap berjalan di layar sentuh.
+    // Di iOS Safari, menangkap pointer setelah gerakan dimulai bisa memicu pointercancel.
+    if (!capturedRef.current) {
+      try { e.currentTarget.setPointerCapture(e.pointerId); capturedRef.current = true; } catch { /* ignore */ }
+    }
   };
 
   const onPointerMove = (e: PointerEvent<HTMLElement>) => {
@@ -148,9 +153,6 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
         didDragAtRef.current = Date.now();
         setDragging(down.index);
         setOver(down.index);
-        if (!capturedRef.current) {
-          try { e.currentTarget.setPointerCapture(down.pointerId); capturedRef.current = true; } catch { /* ignore */ }
-        }
       }
       return;
     }

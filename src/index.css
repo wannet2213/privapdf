@@ -1262,7 +1262,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   padding: 16px;
 }
 .rotate-canvas {
-  transition: transform 0.18s ease-out;
   max-width: 100%;
   height: auto;
 }
@@ -1476,6 +1475,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 .merge-card {
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .merge-file-badge {
   position: absolute;

@@ -95,7 +95,8 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (req.operation === 'compress') {
       outputs = [await compressPdf(req.inputs[0])];
     } else if (req.operation === 'unlock') {
-      outputs = [await unlockPdf(req.inputs[0])];
+      const password = typeof req.options?.password === 'string' ? req.options.password : undefined;
+      outputs = [await unlockPdf(req.inputs[0], password)];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

@@ -13,7 +13,7 @@ export const tools: Tool[] = [
   { id: 'watermark', label: 'Tanda air', description: 'Tambahkan teks tanda air transparan ke semua halaman.', accept: PDF },
   { id: 'crop', label: 'Potong halaman', description: 'Kustom margin untuk memotong semua halaman PDF.', accept: PDF },
   { id: 'compress', label: 'Kompres PDF', description: 'Optimasi struktur PDF untuk ukuran file lebih kecil.', accept: PDF },
-  { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi (tanpa password user).', accept: PDF },
+  { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi — dengan password atau hapus restriction.', accept: PDF },
   { id: 'metadata', label: 'Edit metadata', description: 'Ubah judul, penulis, subjek, dan kata kunci PDF.', accept: PDF },
   { id: 'pdf-to-image', label: 'PDF ke gambar', description: 'Konversi setiap halaman PDF menjadi PNG atau JPEG.', accept: PDF },
   { id: 'extract-text', label: 'Ekstrak teks', description: 'Ambil semua teks dari PDF dan simpan sebagai file teks.', accept: PDF },

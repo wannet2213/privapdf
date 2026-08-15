@@ -1,5 +1,17 @@
 import { PDFDocument, degrees, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
+import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
+
+let unlockToolkitPromise: Promise<PdfToolkit> | undefined;
+function getUnlockToolkit() {
+  if (!unlockToolkitPromise) {
+    unlockToolkitPromise = createPdfToolkit().catch((error) => {
+      unlockToolkitPromise = undefined;
+      throw error;
+    });
+  }
+  return unlockToolkitPromise;
+}
 
 export async function mergePdf(inputs: ArrayBuffer[]): Promise<ArrayBuffer> {
   const out = await PDFDocument.create();
@@ -539,10 +551,37 @@ export async function compressPdf(input: ArrayBuffer): Promise<ArrayBuffer> {
   return (await doc.save({ useObjectStreams: true })).buffer as ArrayBuffer;
 }
 
-/** Hapus enkripsi/proteksi: load dengan ignoreEncryption, simpan ulang tanpa proteksi. */
-export async function unlockPdf(input: ArrayBuffer): Promise<ArrayBuffer> {
-  const doc = await PDFDocument.load(input, { ignoreEncryption: true });
-  return (await doc.save()).buffer as ArrayBuffer;
+/** Hapus enkripsi/proteksi pakai qpdf (WASM) — mendukung user password & owner restriction. */
+export async function unlockPdf(input: ArrayBuffer, password?: string): Promise<ArrayBuffer> {
+  const toolkit = await getUnlockToolkit();
+
+  // Tanpa password: coba buka langsung (menangani PDF yang punya owner restriction
+  // tetapi tetap bisa dibuka tanpa password user).
+  if (!password) {
+    try {
+      const out = await toolkit.removePassword(input, { password: '' });
+      return toArrayBuffer(out);
+    } catch (error) {
+      if (error instanceof PdfPasswordError) {
+        throw new Error('PDF ini memerlukan password untuk dibuka.');
+      }
+      throw error;
+    }
+  }
+
+  try {
+    const out = await toolkit.removePassword(input, { password });
+    return toArrayBuffer(out);
+  } catch (error) {
+    if (error instanceof PdfPasswordError) {
+      throw new Error('Password salah. Periksa kembali password PDF Anda.');
+    }
+    throw error;
+  }
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 /** Referensi halaman pada salah satu dokumen input (0-based). */

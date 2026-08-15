@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
@@ -27,6 +27,8 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
   /** Rotasi relatif per halaman (derajat, 0/90/180/270). */
   const [rotations, setRotations] = useState<Record<number, number>>({});
   const [viewing, setViewing] = useState<number | null>(null);
+  /** Rotasi aktif (derajat) untuk halaman yang sedang ditampilkan. */
+  const currentRot = ((rotations[currentPage] ?? 0) % 360 + 360) % 360;
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +45,8 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
     };
   }, [bytes]);
 
-  // Render halaman aktif (tanpa rotasi UI — rotasi via CSS transform agar real-time)
+  // Render halaman aktif dengan rotasi bawaan pdf.js agar dimensi canvas
+  // (portrait/landscape) ikut menyesuaikan saat halaman diputar 90°/270°.
   useEffect(() => {
     if (loading || !docRef.current) return;
     let cancelled = false;
@@ -53,7 +56,7 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
       try {
         const page = await doc.getPage(currentPage + 1);
         if (cancelled) { page.cleanup(); return; }
-        const viewport = page.getViewport({ scale: PREVIEW_SCALE });
+        const viewport = page.getViewport({ scale: PREVIEW_SCALE, rotation: currentRot });
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = Math.ceil(viewport.width);
@@ -68,9 +71,8 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
       } catch { /* biarkan canvas sebelumnya */ }
     })();
     return () => { cancelled = true; };
-  }, [loading, currentPage]);
+  }, [loading, currentPage, currentRot]);
 
-  const currentRot = ((rotations[currentPage] ?? 0) % 360 + 360) % 360;
   const rotatedCount = Object.values(rotations).filter((a) => a % 360 !== 0).length;
 
   const setRotation = (delta: number) => {
@@ -111,8 +113,8 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
     }
   };
 
-  // Rotasi canvas via CSS: swap dimensi saat 90/270 agar muat container
-  const isQuarter = currentRot === 90 || currentRot === 270;
+  // Rotasi ditangani langsung oleh pdf.js saat render (lihat viewport rotation di atas),
+  // sehingga dimensi canvas otomatis mengikuti orientasi halaman.
 
   return (
     <div className="split-panel">
@@ -121,7 +123,6 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
           <canvas
             ref={canvasRef}
             className="annotate-canvas-base rotate-canvas"
-            style={{ transform: `rotate(${currentRot}deg)` } as CSSProperties}
           />
           {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(currentPage)} aria-label="Lihat halaman full">⤢</button>}
           {!loading && (

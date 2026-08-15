@@ -110,18 +110,11 @@ export function PdfPreview({ bytes, pages, selected, onToggle, onMove }: PdfPrev
     // Deteksi mulai drag (lewati threshold)
     if (draggingRef.current === null) {
       if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-        // Mulai drag: capture pointer sekarang
         draggingRef.current = down.index;
         overIndexRef.current = down.index;
         didDragAtRef.current = Date.now();
         setDragging(down.index);
         setOver(down.index);
-        if (!capturedRef.current) {
-          try {
-            event.currentTarget.setPointerCapture(down.pointerId);
-            capturedRef.current = true;
-          } catch { /* ignore */ }
-        }
       }
       return;
     }

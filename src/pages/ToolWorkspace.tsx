@@ -32,7 +32,7 @@ const PDF_TO_IMAGE_FIELDS: Field[] = [
   { name: 'scale', label: 'Resolusi', type: 'select', default: '2', options: [{ value: '1', label: 'Standar (1x)' }, { value: '2', label: 'Tinggi (2x)' }, { value: '3', label: 'Maksimum (3x)' }] },
 ];
 
-const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'compress', 'unlock']);
+const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'compress']);
 
 const IS_TOUCH = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -50,6 +50,7 @@ export function ToolWorkspace() {
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [dropRejected, setDropRejected] = useState(false);
+  const [unlockPassword, setUnlockPassword] = useState('');
   useEffect(() => { filesRef.current = files; }, [files]);
   useEffect(() => { const cleanup = () => clearSession(filesRef.current); window.addEventListener('pagehide', cleanup); window.addEventListener('beforeunload', cleanup); return () => { window.removeEventListener('pagehide', cleanup); window.removeEventListener('beforeunload', cleanup); cleanup(); }; }, []);
 
@@ -175,6 +176,8 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
+  const handleUnlock = () => runWorker('unlock', [files[0].bytes], unlockPassword.trim() ? { password: unlockPassword } : undefined);
+
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); setDragOver(false); choose(event.dataTransfer.files); };
   const singleFile = toolId !== 'merge';
 
@@ -247,6 +250,20 @@ export function ToolWorkspace() {
         <input ref={addMoreRef} hidden type="file" accept={tool.accept} multiple onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <MergePanel files={mergeFiles} onProcess={handleMergePages} busy={busy} />
       </>
+    )}
+
+    {files.length > 0 && toolId === 'unlock' && (
+      <div className="split-panel">
+        <div className="tool-form">
+          <div className="tool-form-field">
+            <label className="tool-form-label" htmlFor="unlock-password">Password PDF (opsional)</label>
+            <input id="unlock-password" type="password" className="tool-form-input" value={unlockPassword} placeholder="Kosongkan jika PDF bisa dibuka tanpa password" onChange={(e) => setUnlockPassword(e.target.value)} />
+          </div>
+        </div>
+        <button className="primary" onClick={handleUnlock} disabled={busy}>
+          {busy ? 'Memproses…' : 'Hapus proteksi →'}
+        </button>
+      </div>
     )}
 
     {files.length > 0 && SIMPLE_BUTTON_TOOLS.has(toolId!) && (
