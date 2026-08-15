@@ -1,0 +1,10 @@
+node_modules
+dist
+.trae
+.log
+.figma
+build
+.vercel
+public/wasm
+*.tsbuildinfo
+.DS_Store
