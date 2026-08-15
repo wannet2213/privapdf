@@ -34,6 +34,8 @@ const PDF_TO_IMAGE_FIELDS: Field[] = [
 
 const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'compress', 'unlock']);
 
+const IS_TOUCH = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
 export function ToolWorkspace() {
   const { toolId } = useParams();
   const tool = tools.find((item) => item.id === toolId);
@@ -183,7 +185,7 @@ export function ToolWorkspace() {
     <p className="lead">{tool.description}</p>
     <button className={`drop compact ${dragOver ? 'is-drag-over' : ''} ${dropRejected ? 'drop-rejected' : ''}`} onClick={() => ref.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDragOver(true); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDragOver(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragOver(false); }} onDrop={handleDrop}>
       <strong>＋</strong>
-      <span>{dropRejected ? 'Format file tidak didukung' : files.length ? `${files.length} file dipilih` : 'Pilih atau jatuhkan file lokal'}</span>
+      <span>{dropRejected ? 'Format file tidak didukung' : files.length ? `${files.length} file dipilih` : IS_TOUCH ? 'Ketuk untuk memilih file' : 'Pilih atau jatuhkan file lokal'}</span>
       <small>Tidak ada upload ke server</small>
     </button>
     <input ref={ref} hidden type="file" accept={tool.accept} multiple={!singleFile} onChange={(e) => choose(e.target.files)} />

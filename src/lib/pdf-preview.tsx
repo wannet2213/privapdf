@@ -83,7 +83,15 @@ export function PdfPreview({ bytes, pages, selected, onToggle, onMove }: PdfPrev
     // Abaikan jika klik di interaktif elements
     if ((event.target as HTMLElement).closest('button, input, label, .page-thumb-zoom')) return;
     downRef.current = { index, x: event.clientX, y: event.clientY, pointerId: event.pointerId };
-    // JANGAN setPointerCapture di sini - tunggu sampai drag terdeteksi
+    // Tangkap pointer sejak awal agar event drag tetap terkirim ke kartu ini.
+    // Di iOS Safari, menangkap pointer setelah gerakan dimulai bisa memicu pointercancel
+    // sehingga drag tidak pernah berjalan di layar sentuh.
+    if (!capturedRef.current) {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        capturedRef.current = true;
+      } catch { /* ignore */ }
+    }
   };
 
   const handleThumbClick = (pageNumber: number) => {

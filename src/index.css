@@ -494,6 +494,9 @@ footer span:last-child { color: var(--accent); }
   border-radius: var(--r-sm);
   cursor: grab;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
 }
 .page-card:hover {
