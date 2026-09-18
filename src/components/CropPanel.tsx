@@ -226,9 +226,9 @@ export function CropPanel({ bytes, onProcess, busy }: CropPanelProps) {
         </p>
       </div>
 
-      <p className="split-hint">Setiap halaman bisa dipotong berbeda — gunakan ‹ › untuk pindah halaman, atau "Terapkan ke semua" untuk menyalin pemotongan halaman ini. {ratio ? 'Rasio preset dikunci saat mengubah ukuran. ' : ''}Area gelap akan dipotong.</p>
+      <p className="split-hint">Setiap halaman bisa dipotong berbeda, gunakan ‹ › untuk pindah halaman, atau "Terapkan ke semua" untuk menyalin pemotongan halaman ini. {ratio ? 'Rasio preset dikunci saat mengubah ukuran. ' : ''}Area gelap akan dipotong.</p>
       <button className="primary" onClick={submit} disabled={busy || loading || croppedCount === 0}>
-        {busy ? 'Memproses…' : croppedCount > 0 ? `Potong ${croppedCount} halaman →` : 'Potong halaman →'}
+        {busy ? 'Memproses…' : croppedCount > 0 ? `Potong ${croppedCount} halaman` : 'Potong halaman'}
       </button>
       {viewing !== null && (
         <PageViewer

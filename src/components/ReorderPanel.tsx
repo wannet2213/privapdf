@@ -26,7 +26,7 @@ export function ReorderPanel({ bytes, pageCount, order, onOrderChange, onProcess
       <PdfPreview bytes={bytes} pages={pages} selected={selected} onToggle={() => {}} onMove={handleMove} />
       <p className="split-hint">Urutan: {order.map((p) => p + 1).join(' → ')}</p>
       <button className="primary" onClick={onProcess} disabled={busy}>
-        {busy ? 'Memproses…' : 'Simpan urutan baru →'}
+        {busy ? 'Memproses…' : 'Simpan urutan baru'}
       </button>
     </div>
   );

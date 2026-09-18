@@ -164,9 +164,9 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
         <button type="button" className="ghost-btn" onClick={resetAll} disabled={busy || rotatedCount === 0}>Reset semua</button>
       </div>
 
-      <p className="split-hint">Pratinjau berputar real-time saat tombol arah ditekan. Putaran bisa berbeda tiap halaman — navigasi dengan ‹ ›. Diterapkan ke sudut halaman yang sudah ada (relatif).</p>
+      <p className="split-hint">Pratinjau berputar real-time saat tombol arah ditekan. Putaran bisa berbeda tiap halaman, navigasi dengan ‹ ›. Diterapkan ke sudut halaman yang sudah ada (relatif).</p>
       <button className="primary" onClick={submit} disabled={busy || loading || rotatedCount === 0}>
-        {busy ? 'Memproses…' : rotatedCount > 0 ? `Putar ${rotatedCount} halaman →` : 'Putar halaman →'}
+        {busy ? 'Memproses…' : rotatedCount > 0 ? `Putar ${rotatedCount} halaman` : 'Putar halaman'}
       </button>
       {viewing !== null && (
         <PageViewer bytes={bytes} pageNumber={viewing} totalPages={pageCount} onClose={() => setViewing(null)} onPageChange={setViewing} />

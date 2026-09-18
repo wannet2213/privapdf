@@ -339,7 +339,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
             {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(0)} aria-label="Lihat halaman full">⤢</button>}
             {loading && <div className="annotate-loading">Memuat halaman…</div>}
           </div>
-          <p className="annotate-caption">Pratinjau langsung — halaman 1 dari {totalPages}</p>
+          <p className="annotate-caption">Pratinjau langsung, halaman 1 dari {totalPages}</p>
         </div>
 
         <div className="tool-form annotate-form">
@@ -425,8 +425,8 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
                 <>
                   <div className="tool-form-field">
                     <label className="tool-form-label" htmlFor="wm-text">Teks tanda air</label>
-                    <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder="Contoh: RAHASIA — tekan Enter untuk baris baru" onChange={(e) => setWmText(e.target.value)} />
-                    <small className="wm-text-meta">{wmText.split('\n').length} baris — tekan Enter di kolom teks untuk menambah baris</small>
+                    <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder="Contoh: RAHASIA (tekan Enter untuk baris baru)" onChange={(e) => setWmText(e.target.value)} />
+                    <small className="wm-text-meta">{wmText.split('\n').length} baris. Tekan Enter di kolom teks untuk menambah baris</small>
                   </div>
 
                   {wmType === 'positioned' && (
@@ -472,7 +472,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
                         <span className="tool-form-range-value">{wmTileGap.toFixed(1)}×</span>
                       </div>
                       <input id="wm-tilegap" type="range" min={0.5} max={6} step={0.1} value={wmTileGap} onChange={(e) => setWmTileGap(Number(e.target.value))} />
-                      <small className="wm-field-hint">Pengali ukuran font — kecil = rapat, besar = renggang</small>
+                      <small className="wm-field-hint">Pengali ukuran font: kecil = rapat, besar = renggang</small>
                     </div>
                   )}
                   <div className="tool-form-field">
@@ -498,7 +498,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
                       onChange={(e) => setWmLineHeight(Number(e.target.value))}
                     />
                     {wmText.split('\n').length < 2 && (
-                      <small className="wm-field-hint">Berlaku untuk teks multi-baris — tambahkan baris kedua dulu</small>
+                      <small className="wm-field-hint">Berlaku untuk teks multi-baris, tambahkan baris kedua dulu</small>
                     )}
                   </div>
                   <div className="tool-form-field">
@@ -544,7 +544,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
         </div>
       </div>
       <button className="primary" onClick={submit} disabled={busy || (mode === 'watermark' && wmType === 'image' && !wmImage)}>
-        {busy ? 'Memproses…' : mode === 'page-numbers' ? 'Terapkan ke semua halaman →' : 'Tambah tanda air →'}
+        {busy ? 'Memproses…' : mode === 'page-numbers' ? 'Terapkan ke semua halaman' : 'Tambah tanda air'}
       </button>
       {viewing !== null && (
         <PageViewer bytes={bytes} pageNumber={viewing} totalPages={totalPages} onClose={() => setViewing(null)} onPageChange={setViewing} overlayDraw={viewerOverlay} />

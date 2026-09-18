@@ -152,7 +152,7 @@ export function SplitPanel({ bytes, filename, pageCount, onProcess, busy }: Spli
       )}
 
       <button className="primary" onClick={run} disabled={!canRun || busy}>
-        {busy ? 'Memproses…' : mode === 'each' ? `Pisahkan ${selected.length} halaman${asZip && outputCount > 1 ? ' (ZIP)' : ''} →` : mode === 'ranges' ? `Pisahkan menjadi ${parsedRanges.length} file${asZip && outputCount > 1 ? ' (ZIP)' : ''} →` : `Pisahkan menjadi ${parsedGroups.filter((g) => g.length).length} file${asZip && outputCount > 1 ? ' (ZIP)' : ''} →`}
+        {busy ? 'Memproses…' : mode === 'each' ? `Pisahkan ${selected.length} halaman${asZip && outputCount > 1 ? ' (ZIP)' : ''}` : mode === 'ranges' ? `Pisahkan menjadi ${parsedRanges.length} file${asZip && outputCount > 1 ? ' (ZIP)' : ''}` : `Pisahkan menjadi ${parsedGroups.filter((g) => g.length).length} file${asZip && outputCount > 1 ? ' (ZIP)' : ''}`}
       </button>
     </div>
   );

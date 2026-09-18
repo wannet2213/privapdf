@@ -187,7 +187,7 @@ export const FONTS: FontDef[] = [
   { id: 'courier', label: 'Courier', family: '"Courier New"', cssFamily: '"Courier New", Courier, monospace', cssWeight: 'normal', cssStyle: 'normal', standard: StandardFonts.Courier },
   { id: 'courier-bold', label: 'Courier Bold', family: '"Courier New"', cssFamily: '"Courier New", Courier, monospace', cssWeight: 'bold', cssStyle: 'normal', standard: StandardFonts.CourierBold },
   { id: 'courier-italic', label: 'Courier Italic', family: '"Courier New"', cssFamily: '"Courier New", Courier, monospace', cssWeight: 'normal', cssStyle: 'italic', standard: StandardFonts.CourierOblique },
-  // Custom fonts — TTF self-hosted di public/fonts, @font-face via @fontsource (main.tsx)
+  // Custom fonts — TTF self-hosted di public/fonts, dimuat via FontFace dari ttfUrl
   { id: 'dm-sans', label: 'DM Sans', family: '"DM Sans"', cssFamily: '"DM Sans", Helvetica, Arial, sans-serif', cssWeight: 'normal', cssStyle: 'normal', ttfUrl: '/fonts/dm-sans-400.ttf' },
   { id: 'dm-sans-bold', label: 'DM Sans Bold', family: '"DM Sans"', cssFamily: '"DM Sans", Helvetica, Arial, sans-serif', cssWeight: 'bold', cssStyle: 'normal', ttfUrl: '/fonts/dm-sans-700.ttf' },
   { id: 'dm-mono', label: 'DM Mono', family: '"DM Mono"', cssFamily: '"DM Mono", "Courier New", monospace', cssWeight: 'normal', cssStyle: 'normal', ttfUrl: '/fonts/dm-mono-400.ttf' },

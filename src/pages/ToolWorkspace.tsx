@@ -25,7 +25,13 @@ const METADATA_FIELDS: Field[] = [
   { name: 'creator', label: 'Pembuat', type: 'text', placeholder: 'Aplikasi pembuat' },
 ];
 
-const FILE_COLORS = ['#bd4b2f', '#5b8f62', '#3a6ea5', '#8a5a9e', '#c98a2b', '#3d8a8a'];
+const FILE_COLORS = ['#E5322D', '#2FA36B', '#3B6FE0', '#8B5CF6', '#E88C30', '#0E9F9F'];
+
+const UploadIcon = () => (
+  <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 15.5V5" /><path d="m7.5 9.5 4.5-4.5 4.5 4.5" /><path d="M4 16.5V19a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-2.5" />
+  </svg>
+);
 
 const PDF_TO_IMAGE_FIELDS: Field[] = [
   { name: 'format', label: 'Format', type: 'select', default: 'png', options: [{ value: 'png', label: 'PNG' }, { value: 'jpeg', label: 'JPEG' }] },
@@ -187,7 +193,7 @@ export function ToolWorkspace() {
     <h1>{tool.label}</h1>
     <p className="lead">{tool.description}</p>
     <button className={`drop compact ${dragOver ? 'is-drag-over' : ''} ${dropRejected ? 'drop-rejected' : ''}`} onClick={() => ref.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDragOver(true); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDragOver(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragOver(false); }} onDrop={handleDrop}>
-      <strong>＋</strong>
+      <strong className="drop-icon" aria-hidden="true"><UploadIcon/></strong>
       <span>{dropRejected ? 'Format file tidak didukung' : files.length ? `${files.length} file dipilih` : IS_TOUCH ? 'Ketuk untuk memilih file' : 'Pilih atau jatuhkan file lokal'}</span>
       <small>Tidak ada upload ke server</small>
     </button>

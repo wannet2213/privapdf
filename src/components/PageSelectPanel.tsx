@@ -30,7 +30,7 @@ export function PageSelectPanel({ bytes, pageCount, onProcess, busy, title, hint
       <PdfPreview bytes={bytes} pages={pages} selected={selected} onToggle={(page) => setSelected(toggleSelection(selected, page, allPages))} onMove={() => {}} />
       <p className="split-hint">{hint}</p>
       <button className="primary" onClick={() => onProcess(selected)} disabled={!selected.length || busy}>
-        {busy ? 'Memproses…' : `${title} (${selected.length} halaman) →`}
+        {busy ? 'Memproses…' : `${title} (${selected.length} halaman)`}
       </button>
     </div>
   );

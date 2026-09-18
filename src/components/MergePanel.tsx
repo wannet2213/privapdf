@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
+import { moveFileGroup } from '../lib/reorder';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -17,7 +18,7 @@ interface MergePanelProps {
 const PREVIEW_SCALE = 0.28;
 const DRAG_THRESHOLD = 5;
 
-const FILE_COLORS = ['#bd4b2f', '#5b8f62', '#3a6ea5', '#8a5a9e', '#c98a2b', '#3d8a8a'];
+const FILE_COLORS = ['#E5322D', '#2FA36B', '#3B6FE0', '#8B5CF6', '#E88C30', '#0E9F9F'];
 
 function refKey(r: PageRef) { return `${r.file}-${r.page}`; }
 
@@ -196,17 +197,34 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   // Guard: buang ref yang menunjuk file terhapus (render transisi sebelum effect reload jalan)
   const validRefs = refs.filter((r) => r.file >= 0 && r.file < files.length);
 
+  // Tetangga terdekat yang masih punya halaman; null = tidak ada grup untuk ditukar.
+  const neighborWithPages = (fi: number, dir: -1 | 1) => {
+    for (let i = fi + dir; i >= 0 && i < files.length; i += dir) {
+      if (validRefs.some((r) => r.file === i)) return i;
+    }
+    return null;
+  };
+  const moveFile = (fi: number, dir: -1 | 1) => {
+    const target = neighborWithPages(fi, dir);
+    if (target === null) return;
+    setRefs((prev) => moveFileGroup(prev, fi, target, dir === -1));
+  };
+
   return (
     <div className="split-panel">
       <div className="preview-heading">
         <span>{validRefs.length} halaman dari {files.length} dokumen</span>
-        <small>Seret untuk mengatur urutan</small>
+        <small>Seret halaman, atau ↑↓ di nama file untuk pindahkan per file</small>
       </div>
       <div className="merge-legend">
         {files.map((f, i) => pageCounts[i] ? (
           <span key={i} className="merge-legend-item">
             <span className="merge-legend-dot" style={{ background: FILE_COLORS[i % FILE_COLORS.length] }} />
             {f.name} ({pageCounts[i]})
+            <span className="reorder-buttons">
+              <button type="button" aria-label={`Naikkan ${f.name}`} disabled={busy || neighborWithPages(i, -1) === null} onClick={() => moveFile(i, -1)}>↑</button>
+              <button type="button" aria-label={`Turunkan ${f.name}`} disabled={busy || neighborWithPages(i, 1) === null} onClick={() => moveFile(i, 1)}>↓</button>
+            </span>
           </span>
         ) : null)}
       </div>
@@ -245,7 +263,7 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
       </div>
       <p className="split-hint">Urutan akhir: {validRefs.map((r) => pageCounts.slice(0, r.file).reduce((a, b) => a + b, 0) + r.page + 1).join(' → ')}</p>
       <button className="primary" onClick={() => onProcess(validRefs)} disabled={busy || validRefs.length < 1}>
-        {busy ? 'Memproses…' : `Gabungkan ${validRefs.length} halaman →`}
+        {busy ? 'Memproses…' : `Gabungkan ${validRefs.length} halaman`}
       </button>
       {viewing && pageCounts[viewing.file] && (
         <PageViewer

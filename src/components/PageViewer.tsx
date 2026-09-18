@@ -157,7 +157,7 @@ export function PageViewer({ bytes, pageNumber, totalPages, onClose, onPageChang
           <button className="page-viewer-nav" disabled={pageNumber === 0} onClick={() => onPageChange(pageNumber - 1)} aria-label="Halaman sebelumnya">‹</button>
           <span className="page-viewer-count">{pageNumber + 1} / {totalPages}</span>
           <button className="page-viewer-nav" disabled={pageNumber >= totalPages - 1} onClick={() => onPageChange(pageNumber + 1)} aria-label="Halaman berikutnya">›</button>
-          {crop && <span className="page-viewer-crop-hint">Mode potong aktif — seret kotak</span>}
+          {crop && <span className="page-viewer-crop-hint">Mode potong aktif, seret kotak</span>}
           <button className="page-viewer-close" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="page-viewer-canvas-wrap">
