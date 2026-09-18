@@ -36,6 +36,12 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   const [over, setOver] = useState<number | null>(null);
   const [viewing, setViewing] = useState<PageRef | null>(null);
   const [mode, setMode] = useState<'halaman' | 'file'>('halaman');
+  // Drag baris file: pola yang sama dengan drag kartu halaman (pointer capture aman iOS).
+  const groupDown = useRef<{ gi: number; x: number; y: number } | null>(null);
+  const groupDrag = useRef<number | null>(null);
+  const groupOver = useRef<number | null>(null);
+  const [groupDragging, setGroupDragging] = useState<number | null>(null);
+  const [groupOverIdx, setGroupOverIdx] = useState<number | null>(null);
 
   const downRef = useRef<{ index: number; x: number; y: number; pointerId: number } | null>(null);
   const draggingRef = useRef<number | null>(null);
@@ -201,10 +207,46 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   // Urutan grup file menurut kondisi refs saat ini; halaman yang diacak manual tetap satu grup.
   const groupOrder: number[] = [];
   for (const r of validRefs) if (!groupOrder.includes(r.file)) groupOrder.push(r.file);
-  const moveGroup = (gi: number, dir: -1 | 1) => {
-    const target = groupOrder[gi + dir];
-    if (target === undefined) return;
-    setRefs((prev) => moveFileGroup(prev, groupOrder[gi], target, dir === -1));
+  const moveGroupTo = (gi: number, ti: number) => {
+    if (gi === ti || ti < 0 || ti >= groupOrder.length) return;
+    setRefs((prev) => moveFileGroup(prev, groupOrder[gi], groupOrder[ti], ti < gi));
+  };
+
+  const resetGroupDrag = () => {
+    groupDown.current = null;
+    groupDrag.current = null;
+    groupOver.current = null;
+    setGroupDragging(null);
+    setGroupOverIdx(null);
+  };
+  const onRowPointerDown = (e: PointerEvent<HTMLElement>, gi: number) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    groupDown.current = { gi, x: e.clientX, y: e.clientY };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+  };
+  const onRowPointerMove = (e: PointerEvent<HTMLElement>) => {
+    const down = groupDown.current;
+    if (!down) return;
+    if (groupDrag.current === null) {
+      if (Math.abs(e.clientX - down.x) > DRAG_THRESHOLD || Math.abs(e.clientY - down.y) > DRAG_THRESHOLD) {
+        groupDrag.current = down.gi;
+        groupOver.current = down.gi;
+        setGroupDragging(down.gi);
+        setGroupOverIdx(down.gi);
+      }
+      return;
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-group-index]');
+    const gi = el ? Number(el.dataset.groupIndex) : null;
+    const next = gi !== null && Number.isInteger(gi) ? gi : null;
+    groupOver.current = next;
+    setGroupOverIdx(next);
+  };
+  const onRowPointerUp = () => {
+    if (groupDrag.current !== null) {
+      moveGroupTo(groupDrag.current, groupOver.current ?? groupDrag.current);
+    }
+    resetGroupDrag();
   };
 
   return (
@@ -225,8 +267,9 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
           </span>
         ) : null)}
       </div>
-      {mode === 'halaman' ? (
-      <div className="preview-grid merge-grid" aria-busy={!validRefs.length}>
+      {/* Grid tetap ter-mount di kedua mode: meng-unmount memusnahkan canvas
+          pratinjau sehingga kembali ke mode ini menampilkan kartu kosong. */}
+      <div className="preview-grid merge-grid" aria-busy={!validRefs.length} style={{ display: mode === 'halaman' ? undefined : 'none' }}>
         {validRefs.map((ref, index) => {
           const key = refKey(ref);
           return (
@@ -259,16 +302,25 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
           );
         })}
       </div>
-      ) : (
+      {mode === 'file' && (
       <div className="file-order">
         {groupOrder.map((fi, gi) => (
-          <div key={fi} className="file-order-row">
+          <div
+            key={fi}
+            data-group-index={gi}
+            className={`file-order-row ${groupDragging === gi ? 'is-dragging' : ''} ${groupOverIdx === gi && groupDragging !== null && groupDragging !== gi ? 'drop-target' : ''}`}
+            onPointerDown={(e) => onRowPointerDown(e, gi)}
+            onPointerMove={onRowPointerMove}
+            onPointerUp={onRowPointerUp}
+            onPointerCancel={resetGroupDrag}
+            onLostPointerCapture={resetGroupDrag}
+          >
             <span className="merge-legend-dot" style={{ background: FILE_COLORS[fi % FILE_COLORS.length] }} />
             <span className="merge-file-name">{files[fi].name}</span>
             <small>{pageCounts[fi]} halaman</small>
             <span className="reorder-buttons">
-              <button type="button" aria-label={`Naikkan ${files[fi].name}`} disabled={gi === 0} onClick={() => moveGroup(gi, -1)}>↑</button>
-              <button type="button" aria-label={`Turunkan ${files[fi].name}`} disabled={gi === groupOrder.length - 1} onClick={() => moveGroup(gi, 1)}>↓</button>
+              <button type="button" aria-label={`Naikkan ${files[fi].name}`} disabled={gi === 0} onClick={() => moveGroupTo(gi, gi - 1)}>↑</button>
+              <button type="button" aria-label={`Turunkan ${files[fi].name}`} disabled={gi === groupOrder.length - 1} onClick={() => moveGroupTo(gi, gi + 1)}>↓</button>
             </span>
           </div>
         ))}
