@@ -35,6 +35,7 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [viewing, setViewing] = useState<PageRef | null>(null);
+  const [mode, setMode] = useState<'halaman' | 'file'>('halaman');
 
   const downRef = useRef<{ index: number; x: number; y: number; pointerId: number } | null>(null);
   const draggingRef = useRef<number | null>(null);
@@ -197,37 +198,34 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   // Guard: buang ref yang menunjuk file terhapus (render transisi sebelum effect reload jalan)
   const validRefs = refs.filter((r) => r.file >= 0 && r.file < files.length);
 
-  // Tetangga terdekat yang masih punya halaman; null = tidak ada grup untuk ditukar.
-  const neighborWithPages = (fi: number, dir: -1 | 1) => {
-    for (let i = fi + dir; i >= 0 && i < files.length; i += dir) {
-      if (validRefs.some((r) => r.file === i)) return i;
-    }
-    return null;
-  };
-  const moveFile = (fi: number, dir: -1 | 1) => {
-    const target = neighborWithPages(fi, dir);
-    if (target === null) return;
-    setRefs((prev) => moveFileGroup(prev, fi, target, dir === -1));
+  // Urutan grup file menurut kondisi refs saat ini; halaman yang diacak manual tetap satu grup.
+  const groupOrder: number[] = [];
+  for (const r of validRefs) if (!groupOrder.includes(r.file)) groupOrder.push(r.file);
+  const moveGroup = (gi: number, dir: -1 | 1) => {
+    const target = groupOrder[gi + dir];
+    if (target === undefined) return;
+    setRefs((prev) => moveFileGroup(prev, groupOrder[gi], target, dir === -1));
   };
 
   return (
     <div className="split-panel">
       <div className="preview-heading">
         <span>{validRefs.length} halaman dari {files.length} dokumen</span>
-        <small>Seret halaman, atau ↑↓ di nama file untuk pindahkan per file</small>
+        <small>{mode === 'halaman' ? 'Seret kartu untuk mengatur urutan' : 'Gunakan ↑↓ untuk memindahkan file'}</small>
+      </div>
+      <div className="split-tabs" role="tablist" aria-label="Mode pengurutan gabungan">
+        <button role="tab" aria-selected={mode === 'halaman'} className={`split-tab ${mode === 'halaman' ? 'is-active' : ''}`} onClick={() => setMode('halaman')}>Per halaman</button>
+        <button role="tab" aria-selected={mode === 'file'} className={`split-tab ${mode === 'file' ? 'is-active' : ''}`} onClick={() => setMode('file')}>Per file</button>
       </div>
       <div className="merge-legend">
         {files.map((f, i) => pageCounts[i] ? (
           <span key={i} className="merge-legend-item">
             <span className="merge-legend-dot" style={{ background: FILE_COLORS[i % FILE_COLORS.length] }} />
             {f.name} ({pageCounts[i]})
-            <span className="reorder-buttons">
-              <button type="button" aria-label={`Naikkan ${f.name}`} disabled={busy || neighborWithPages(i, -1) === null} onClick={() => moveFile(i, -1)}>↑</button>
-              <button type="button" aria-label={`Turunkan ${f.name}`} disabled={busy || neighborWithPages(i, 1) === null} onClick={() => moveFile(i, 1)}>↓</button>
-            </span>
           </span>
         ) : null)}
       </div>
+      {mode === 'halaman' ? (
       <div className="preview-grid merge-grid" aria-busy={!validRefs.length}>
         {validRefs.map((ref, index) => {
           const key = refKey(ref);
@@ -261,6 +259,21 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
           );
         })}
       </div>
+      ) : (
+      <div className="file-order">
+        {groupOrder.map((fi, gi) => (
+          <div key={fi} className="file-order-row">
+            <span className="merge-legend-dot" style={{ background: FILE_COLORS[fi % FILE_COLORS.length] }} />
+            <span className="merge-file-name">{files[fi].name}</span>
+            <small>{pageCounts[fi]} halaman</small>
+            <span className="reorder-buttons">
+              <button type="button" aria-label={`Naikkan ${files[fi].name}`} disabled={gi === 0} onClick={() => moveGroup(gi, -1)}>↑</button>
+              <button type="button" aria-label={`Turunkan ${files[fi].name}`} disabled={gi === groupOrder.length - 1} onClick={() => moveGroup(gi, 1)}>↓</button>
+            </span>
+          </div>
+        ))}
+      </div>
+      )}
       <p className="split-hint">Urutan akhir: {validRefs.map((r) => pageCounts.slice(0, r.file).reduce((a, b) => a + b, 0) + r.page + 1).join(' → ')}</p>
       <button className="primary" onClick={() => onProcess(validRefs)} disabled={busy || validRefs.length < 1}>
         {busy ? 'Memproses…' : `Gabungkan ${validRefs.length} halaman`}
