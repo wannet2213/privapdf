@@ -12,10 +12,13 @@ interface ToolOptionsFormProps {
   onProcess: (values: Record<string, string | number>) => void;
   busy: boolean;
   submitLabel: string;
+  /** Aksi kedua yang memakai nilai form yang sama (mis. unduh sebagai ZIP). */
+  secondaryLabel?: string;
+  onSecondary?: (values: Record<string, string | number>) => void;
   children?: ReactNode;
 }
 
-export function ToolOptionsForm({ fields, onProcess, busy, submitLabel, children }: ToolOptionsFormProps) {
+export function ToolOptionsForm({ fields, onProcess, busy, submitLabel, secondaryLabel, onSecondary, children }: ToolOptionsFormProps) {
   const [values, setValues] = useState<Record<string, string | number>>(() => {
     const init: Record<string, string | number> = {};
     for (const f of fields) {
@@ -60,6 +63,11 @@ export function ToolOptionsForm({ fields, onProcess, busy, submitLabel, children
       <button className="primary" onClick={() => onProcess(values)} disabled={busy}>
         {busy ? 'Memproses…' : submitLabel}
       </button>
+      {secondaryLabel && onSecondary && (
+        <button className="ghost-btn" onClick={() => onSecondary(values)} disabled={busy}>
+          {secondaryLabel}
+        </button>
+      )}
     </div>
   );
 }

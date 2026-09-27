@@ -24,8 +24,11 @@ if (IS_DEV) {
     );
   });
 } else {
-  const CACHE = 'privapdf-shell-v3';
-  const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg', '/wasm/office/soffice.js', '/wasm/office/soffice.wasm', '/wasm/office/soffice.data', '/wasm/office/soffice.worker.js', '/wasm/office/browser.worker.js'];
+  const CACHE = 'privapdf-shell-v4';
+  // Hanya file yang benar-benar ada di public/. Aset Office WASM belum
+  // disertakan (lihat halaman Privacy) dan tidak boleh dicache — SPA rewrite
+  // akan menyajikan index.html dengan status 200 untuk path yang hilang.
+  const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
   self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())));
   self.addEventListener('activate', (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim())));
   self.addEventListener('fetch', (event) => {
@@ -35,8 +38,12 @@ if (IS_DEV) {
       event.respondWith(fetch(request).catch(() => caches.match('/index.html')));
       return;
     }
+    // Jangan cache respons HTML untuk request non-navigasi: SPA rewrite
+    // menjawab 200 dengan index.html untuk path aset yang tidak ada, dan
+    // mencachernya akan meracuni shell (HTML tersaji sebagai JS/WASM).
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok && new URL(request.url).origin === self.location.origin) {
+      const isHtml = (response.headers.get('content-type') || '').includes('text/html');
+      if (response.ok && !isHtml && new URL(request.url).origin === self.location.origin) {
         const copy = response.clone();
         caches.open(CACHE).then((cache) => cache.put(request, copy));
       }

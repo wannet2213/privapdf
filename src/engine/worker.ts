@@ -1,13 +1,13 @@
 import {
   mergePdf, mergePages, splitPdfEach, splitPdfGroups, splitPdfRanges, rotatePdf, imageToPdf,
-  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf,
+  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm,
 } from '../engines/pdf-native';
 import { officeToPdf } from '../engines/office-native';
 import { isJobRequest, errorEvent } from './protocol';
 import { validateMagicBytes } from '../lib/validation';
 import type { SplitMode } from './types';
 
-const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock']);
+const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten']);
 
 self.onmessage = async (e: MessageEvent) => {
   const req = e.data;
@@ -97,6 +97,17 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (req.operation === 'unlock') {
       const password = typeof req.options?.password === 'string' ? req.options.password : undefined;
       outputs = [await unlockPdf(req.inputs[0], password)];
+    } else if (req.operation === 'protect') {
+      const password = typeof req.options?.password === 'string' ? req.options.password : '';
+      if (!password) throw new Error('Password tidak boleh kosong.');
+      const ownerPassword = typeof req.options?.ownerPassword === 'string' && req.options.ownerPassword ? req.options.ownerPassword : undefined;
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await protectPdf(req.inputs[0], { password, ownerPassword })];
+      outputNames = [`${baseName}-terproteksi.pdf`];
+    } else if (req.operation === 'flatten') {
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await flattenForm(req.inputs[0])];
+      outputNames = [`${baseName}-flat.pdf`];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

@@ -16,6 +16,10 @@ import { RotatePanel } from '../components/RotatePanel';
 import { MergePanel, type PageRef } from '../components/MergePanel';
 import { ToolOptionsForm, type Field } from '../components/ToolOptionsForm';
 import { pdfToImages, extractText } from '../lib/pdf-client';
+import { stampImage, type StampOptions } from '../engines/pdf-native';
+import { SignPanel } from '../components/SignPanel';
+import { FormFillPanel } from '../components/FormFillPanel';
+import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
 
 const METADATA_FIELDS: Field[] = [
   { name: 'title', label: 'Judul', type: 'text', placeholder: 'Judul dokumen' },
@@ -57,6 +61,8 @@ export function ToolWorkspace() {
   const [dragOver, setDragOver] = useState(false);
   const [dropRejected, setDropRejected] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
+  const [protectPassword, setProtectPassword] = useState('');
+  const [protectOwner, setProtectOwner] = useState('');
   useEffect(() => { filesRef.current = files; }, [files]);
   useEffect(() => { const cleanup = () => clearSession(filesRef.current); window.addEventListener('pagehide', cleanup); window.addEventListener('beforeunload', cleanup); return () => { window.removeEventListener('pagehide', cleanup); window.removeEventListener('beforeunload', cleanup); cleanup(); }; }, []);
 
@@ -157,16 +163,40 @@ export function ToolWorkspace() {
     runWorker(toolId!, [files[0].bytes], opts);
   };
 
-  const handlePdfToImage = async (values: Record<string, string | number>) => {
+  const renderPdfToImages = async (values: Record<string, string | number>) => {
     const format = values.format as 'png' | 'jpeg';
     const scale = Number(values.scale) || 2;
     setBusy(true); setStatus('Merender halaman…');
     try {
       const blobs = await pdfToImages(files[0].bytes, { format, scale }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
       const names = blobs.map((_, i) => `${files[0].name.replace(/\.pdf$/i, '')}-hal-${i + 1}.${format === 'jpeg' ? 'jpg' : 'png'}`);
-      downloadBlobs(blobs, names, `image/${format}`);
-      setStatus(`Selesai. ${blobs.length} gambar telah diunduh.`);
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Render gagal.'); }
+      return { blobs, names, format };
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : 'Render gagal.');
+      setBusy(false);
+      return null;
+    }
+  };
+
+  const handlePdfToImage = async (values: Record<string, string | number>) => {
+    const out = await renderPdfToImages(values);
+    if (!out) return;
+    downloadBlobs(out.blobs, out.names, `image/${out.format}`);
+    setStatus(`Selesai. ${out.blobs.length} gambar telah diunduh.`);
+    setBusy(false);
+  };
+
+  const handlePdfToImageZip = async (values: Record<string, string | number>) => {
+    const out = await renderPdfToImages(values);
+    if (!out) return;
+    try {
+      setStatus('Mengemas ZIP…');
+      const bytes = await Promise.all(out.blobs.map((b) => b.arrayBuffer()));
+      const zip = await createZip(bytes.map((b, i) => ({ name: out.names[i], bytes: b })));
+      const zipName = `${files[0].name.replace(/\.pdf$/i, '')}-gambar.zip`;
+      downloadBlobs([zip], [zipName], 'application/zip');
+      setStatus(`Selesai. ${out.blobs.length} gambar dikemas dalam ${zipName}.`);
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal mengemas ZIP.'); }
     setBusy(false);
   };
 
@@ -182,10 +212,54 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
+  const handleSign = async (opts: StampOptions) => {
+    setBusy(true); setStatus('Menempelkan tanda tangan…');
+    try {
+      const out = await stampImage(files[0].bytes, opts);
+      downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-ditandatangani.pdf`], 'application/pdf');
+      setStatus('Selesai. PDF bertanda tangan telah diunduh.');
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal menempelkan tanda tangan.'); }
+    setBusy(false);
+  };
+
+  const downloadBuffer = (out: ArrayBuffer, suffix: string) => {
+    downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-${suffix}.pdf`], 'application/pdf');
+    setStatus('Selesai. PDF telah diunduh.');
+  };
+
+  const handleFormDownload = (out: ArrayBuffer) => {
+    downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-terisi.pdf`], 'application/pdf');
+    setStatus('Selesai. PDF formulir terisi telah diunduh.');
+  };
+
+  const handleFlatten = () => runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
+
+  const handleImageToolkit = async (items: ImageOutput[]) => {
+    setBusy(true);
+    if (items.length === 1) {
+      downloadBlobs([items[0].blob], [items[0].name], items[0].blob.type);
+      setStatus(`Selesai. ${items[0].name} telah diunduh.`);
+    } else {
+      setStatus('Mengemas ZIP…');
+      const bytes = await Promise.all(items.map((i) => i.blob.arrayBuffer()));
+      const zip = await createZip(bytes.map((b, i) => ({ name: items[i].name, bytes: b })));
+      downloadBlobs([zip], ['privapdf-gambar.zip'], 'application/zip');
+      setStatus(`Selesai. ${items.length} gambar dikemas dalam privapdf-gambar.zip.`);
+    }
+    setBusy(false);
+  };
+
   const handleUnlock = () => runWorker('unlock', [files[0].bytes], unlockPassword.trim() ? { password: unlockPassword } : undefined);
 
+  const handleProtect = () => {
+    if (!protectPassword.trim()) { setStatus('Password buka wajib diisi.'); return; }
+    const opts: Record<string, unknown> = { password: protectPassword, filename: files[0]?.name };
+    if (protectOwner.trim()) opts.ownerPassword = protectOwner;
+    runWorker('protect', [files[0].bytes], opts);
+  };
+
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); setDragOver(false); choose(event.dataTransfer.files); };
-  const singleFile = toolId !== 'merge';
+  const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit';
 
   return <div className="workspace page">
     <Link className="back" to="/tools">← semua tools</Link>
@@ -232,11 +306,29 @@ export function ToolWorkspace() {
     )}
 
     {files.length > 0 && toolId === 'pdf-to-image' && (
-      <ToolOptionsForm fields={PDF_TO_IMAGE_FIELDS} onProcess={handlePdfToImage} busy={busy} submitLabel={`Konversi ${pageCount || 'semua'} halaman →`} />
+      <ToolOptionsForm fields={PDF_TO_IMAGE_FIELDS} onProcess={handlePdfToImage} onSecondary={handlePdfToImageZip} secondaryLabel="Konversi halaman → ZIP" busy={busy} submitLabel={`Konversi ${pageCount || 'semua'} halaman →`} />
     )}
 
     {files.length > 0 && toolId === 'extract-text' && (
       <button className="primary" onClick={handleExtractText} disabled={busy}>{busy ? 'Memproses…' : 'Ekstrak teks →'}</button>
+    )}
+
+    {files.length > 0 && toolId === 'sign' && (
+      <SignPanel bytes={files[0].bytes} onProcess={handleSign} busy={busy} />
+    )}
+
+    {files.length > 0 && toolId === 'image-toolkit' && (
+      <ImageToolkitPanel files={files} onProcess={handleImageToolkit} />
+    )}
+
+    {files.length > 0 && toolId === 'fill-form' && (
+      <FormFillPanel bytes={files[0].bytes} onProcess={handleFormDownload} busy={busy} />
+    )}
+
+    {files.length > 0 && toolId === 'flatten' && (
+      <button className="primary" onClick={handleFlatten} disabled={busy}>
+        {busy ? 'Memproses…' : 'Ratakan formulir →'}
+      </button>
     )}
 
     {files.length > 0 && toolId === 'merge' && (
@@ -268,6 +360,24 @@ export function ToolWorkspace() {
         </div>
         <button className="primary" onClick={handleUnlock} disabled={busy}>
           {busy ? 'Memproses…' : 'Hapus proteksi →'}
+        </button>
+      </div>
+    )}
+
+    {files.length > 0 && toolId === 'protect' && (
+      <div className="split-panel">
+        <div className="tool-form">
+          <div className="tool-form-field">
+            <label className="tool-form-label" htmlFor="protect-password">Password buka (wajib)</label>
+            <input id="protect-password" type="password" className="tool-form-input" value={protectPassword} placeholder="Password yang diminta saat membuka PDF" onChange={(e) => setProtectPassword(e.target.value)} />
+          </div>
+          <div className="tool-form-field">
+            <label className="tool-form-label" htmlFor="protect-owner">Password pemilik (opsional)</label>
+            <input id="protect-owner" type="password" className="tool-form-input" value={protectOwner} placeholder="Akses penuh tanpa batasan; default sama dengan password buka" onChange={(e) => setProtectOwner(e.target.value)} />
+          </div>
+        </div>
+        <button className="primary" onClick={handleProtect} disabled={busy}>
+          {busy ? 'Memproses…' : 'Beri password →'}
         </button>
       </div>
     )}

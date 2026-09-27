@@ -1,4 +1,4 @@
-import { PDFDocument, degrees, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, degrees, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
 
@@ -581,13 +581,132 @@ export async function unlockPdf(input: ArrayBuffer, password?: string): Promise<
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteLength) as ArrayBuffer;
+}
+
+/** Opsi enkripsi PDF. */
+export interface ProtectOptions {
+  /** Password yang diminta saat membuka PDF. */
+  password: string;
+  /** Password pemilik (akses penuh). Default: sama dengan password. */
+  ownerPassword?: string;
+}
+
+/** Enkripsi PDF dengan password (AES-256 via qpdf) — pasangan unlockPdf. */
+export async function protectPdf(input: ArrayBuffer, opts: ProtectOptions): Promise<ArrayBuffer> {
+  if (!opts.password) throw new Error('Password tidak boleh kosong.');
+  const toolkit = await getUnlockToolkit();
+  try {
+    const out = await toolkit.lock(input, {
+      userPassword: opts.password,
+      ...(opts.ownerPassword ? { ownerPassword: opts.ownerPassword } : {}),
+    });
+    return toArrayBuffer(out);
+  } catch (error) {
+    if (error instanceof PdfPasswordError) {
+      throw new Error('PDF sudah terenkripsi. Hapus proteksi dulu sebelum memberi password baru.');
+    }
+    throw error;
+  }
 }
 
 /** Referensi halaman pada salah satu dokumen input (0-based). */
 export interface PageRef {
   file: number;
   page: number;
+}
+
+/** Opsi penempelan gambar (tanda tangan / stempel) ke halaman tertentu. */
+export interface StampOptions {
+  imageBytes: ArrayBuffer;
+  imageType: 'png' | 'jpg';
+  /** Indeks halaman 0-based yang menerima gambar; indeks di luar rentang dilewati. */
+  pages: number[];
+  /** Posisi pojok kiri-atas gambar, dalam persen lebar/tinggi halaman. */
+  xPct: number;
+  yPct: number;
+  /** Lebar gambar dalam persen lebar halaman; tinggi mengikuti rasio aspek. */
+  widthPct: number;
+  /** 0-1. */
+  opacity: number;
+}
+
+/** Tempel gambar (tanda tangan / stempel) pada halaman terpilih — jalankan di main thread seperti pdf-to-image. */
+export async function stampImage(input: ArrayBuffer, opts: StampOptions): Promise<ArrayBuffer> {
+  const doc = await PDFDocument.load(input);
+  const pages = doc.getPages();
+  const targets = opts.pages.map((index) => pages[index]).filter((page): page is PDFPage => Boolean(page));
+  if (!targets.length) throw new Error('Tidak ada halaman valid untuk ditempeli gambar.');
+  const image = opts.imageType === 'png' ? await doc.embedPng(opts.imageBytes) : await doc.embedJpg(opts.imageBytes);
+  for (const page of targets) {
+    const { width, height } = page.getSize();
+    const w = (opts.widthPct / 100) * width;
+    const h = w * (image.height / image.width);
+    const x = (opts.xPct / 100) * width;
+    const y = height - (opts.yPct / 100) * height - h;
+    page.drawImage(image, { x, y, width: w, height: h, opacity: opts.opacity });
+  }
+  return (await doc.save()).buffer as ArrayBuffer;
+}
+
+/** Satu field AcroForm yang tampil di UI. */
+export interface FormFieldInfo {
+  name: string;
+  type: 'text' | 'checkbox' | 'dropdown' | 'radio' | 'optionlist';
+  value: string;
+  /** Pilihan yang tersedia (dropdown/radio/optionlist). */
+  options?: string[];
+}
+
+/** Baca semua field AcroForm yang bisa diisi — jalankan di main thread. */
+export async function listFormFields(input: ArrayBuffer): Promise<FormFieldInfo[]> {
+  const doc = await PDFDocument.load(input);
+  if (!doc.getForm) return [];
+  const form = doc.getForm();
+  return form.getFields().flatMap((field): FormFieldInfo[] => {
+    const name = field.getName();
+    if (field instanceof PDFTextField) return [{ name, type: 'text' as const, value: field.getText() ?? '' }];
+    if (field instanceof PDFCheckBox) return [{ name, type: 'checkbox' as const, value: field.isChecked() ? 'ya' : 'tidak' }];
+    if (field instanceof PDFDropdown) return [{ name, type: 'dropdown' as const, value: field.getSelected()[0] ?? '', options: field.getOptions() }];
+    if (field instanceof PDFRadioGroup) return [{ name, type: 'radio' as const, value: field.getSelected() ?? '', options: field.getOptions() }];
+    if (field instanceof PDFOptionList) return [{ name, type: 'optionlist' as const, value: field.getSelected()[0] ?? '', options: field.getOptions() }];
+    return [];
+  });
+}
+
+export interface FormFillValues {
+  /** Nama field → nilai (teks) atau indeks pilihan (dropdown/radio/optionlist) atau boolean (checkbox). */
+  values: Record<string, string | number | boolean>;
+}
+
+/** Isi field AcroForm sesuai nilai yang diberikan — jalankan di main thread. */
+export async function fillForm(input: ArrayBuffer, values: Record<string, string | number | boolean>): Promise<ArrayBuffer> {
+  const doc = await PDFDocument.load(input);
+  const form = doc.getForm();
+  for (const [name, value] of Object.entries(values)) {
+    let field;
+    try {
+      field = form.getField(name);
+    } catch {
+      continue;
+    }
+    if (field instanceof PDFTextField && typeof value === 'string') field.setText(value);
+    else if (field instanceof PDFCheckBox) value ? field.check() : field.uncheck();
+    else if ((field instanceof PDFDropdown || field instanceof PDFRadioGroup || field instanceof PDFOptionList) && (typeof value === 'number' || typeof value === 'string')) {
+      const options = field.getOptions();
+      const selection = typeof value === 'number' ? options[value] : value;
+      if (selection !== undefined) field.select(selection);
+    }
+  }
+  form.updateFieldAppearances();
+  return (await doc.save()).buffer as ArrayBuffer;
+}
+
+/** Ratakan semua form/annotation menjadi konten statis — pakai qpdf WASM (pdfstudio). */
+export async function flattenForm(input: ArrayBuffer): Promise<ArrayBuffer> {
+  const toolkit = await getUnlockToolkit();
+  const out = await toolkit.flatten(input, { annotations: 'all' });
+  return toArrayBuffer(out);
 }
 
 /**

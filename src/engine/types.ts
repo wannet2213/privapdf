@@ -1,7 +1,7 @@
 export type Operation =
   | 'merge' | 'merge-pages' | 'split' | 'rotate' | 'image-to-pdf' | 'pdf-to-image' | 'office-to-pdf'
   | 'delete-pages' | 'reorder-pages' | 'page-numbers' | 'watermark'
-  | 'metadata' | 'crop' | 'compress' | 'unlock' | 'extract-text';
+  | 'metadata' | 'crop' | 'compress' | 'unlock' | 'protect' | 'flatten' | 'extract-text';
 export type Phase = 'validate' | 'load engine' | 'process' | 'sanitize' | 'finalize';
 
 export type SplitMode = 'each' | 'ranges' | 'groups';

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
 import { moveFileGroup } from '../lib/reorder';
+import { useDragSort } from '../lib/use-drag-sort';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -16,7 +17,6 @@ interface MergePanelProps {
 }
 
 const PREVIEW_SCALE = 0.28;
-const DRAG_THRESHOLD = 5;
 
 const FILE_COLORS = ['#E5322D', '#2FA36B', '#3B6FE0', '#8B5CF6', '#E88C30', '#0E9F9F'];
 
@@ -32,22 +32,8 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   const [rendered, setRendered] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const [dragging, setDragging] = useState<number | null>(null);
-  const [over, setOver] = useState<number | null>(null);
   const [viewing, setViewing] = useState<PageRef | null>(null);
   const [mode, setMode] = useState<'halaman' | 'file'>('halaman');
-  // Drag baris file: pola yang sama dengan drag kartu halaman (pointer capture aman iOS).
-  const groupDown = useRef<{ gi: number; x: number; y: number } | null>(null);
-  const groupDrag = useRef<number | null>(null);
-  const groupOver = useRef<number | null>(null);
-  const [groupDragging, setGroupDragging] = useState<number | null>(null);
-  const [groupOverIdx, setGroupOverIdx] = useState<number | null>(null);
-
-  const downRef = useRef<{ index: number; x: number; y: number; pointerId: number } | null>(null);
-  const draggingRef = useRef<number | null>(null);
-  const overIndexRef = useRef<number | null>(null);
-  const capturedRef = useRef(false);
-  const didDragAtRef = useRef(0);
 
   // Load all documents, build initial refs
   useEffect(() => {
@@ -130,62 +116,26 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
     return () => { cancelled = true; observer?.disconnect(); };
   }, [loading, refs, rendered]);
 
-  const cleanup = () => {
-    downRef.current = null;
-    draggingRef.current = null;
-    overIndexRef.current = null;
-    capturedRef.current = false;
-    setDragging(null);
-    setOver(null);
+  // Drag kartu & baris: mouse = langsung, sentuh = tahan dulu (lihat useDragSort).
+  const validRefs = refs.filter((r) => r.file >= 0 && r.file < files.length);
+  // Urutan grup file menurut kondisi refs saat ini; halaman yang diacak manual tetap satu grup.
+  const groupOrder: number[] = [];
+  for (const r of validRefs) if (!groupOrder.includes(r.file)) groupOrder.push(r.file);
+  const moveGroupTo = (gi: number, ti: number) => {
+    if (gi === ti || ti < 0 || ti >= groupOrder.length) return;
+    setRefs((prev) => moveFileGroup(prev, groupOrder[gi], groupOrder[ti], ti < gi));
   };
-
-  const onPointerDown = (e: PointerEvent<HTMLElement>, index: number) => {
-    if ((e.target as HTMLElement).closest('button, .merge-delete-btn')) return;
-    downRef.current = { index, x: e.clientX, y: e.clientY, pointerId: e.pointerId };
-    // Tangkap pointer sejak awal agar drag tetap berjalan di layar sentuh.
-    // Di iOS Safari, menangkap pointer setelah gerakan dimulai bisa memicu pointercancel.
-    if (!capturedRef.current) {
-      try { e.currentTarget.setPointerCapture(e.pointerId); capturedRef.current = true; } catch { /* ignore */ }
-    }
-  };
-
-  const onPointerMove = (e: PointerEvent<HTMLElement>) => {
-    const down = downRef.current;
-    if (!down) return;
-    const dx = e.clientX - down.x;
-    const dy = e.clientY - down.y;
-    if (draggingRef.current === null) {
-      if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-        draggingRef.current = down.index;
-        overIndexRef.current = down.index;
-        didDragAtRef.current = Date.now();
-        setDragging(down.index);
-        setOver(down.index);
-      }
-      return;
-    }
-    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-merge-index]');
-    const ti = target ? Number(target.dataset.mergeIndex) : null;
-    const next = ti !== null && Number.isInteger(ti) ? ti : null;
-    overIndexRef.current = next;
-    setOver(next);
-  };
-
-  const onPointerUp = (index: number) => {
-    if (draggingRef.current !== null) {
-      const target = overIndexRef.current ?? index;
-      const from = draggingRef.current;
-      if (from !== target) {
-        setRefs((prev) => {
-          const next = [...prev];
-          const [moved] = next.splice(from, 1);
-          next.splice(target, 0, moved);
-          return next;
-        });
-      }
-    }
-    cleanup();
-  };
+  const cardDrag = useDragSort('[data-merge-index]', 'mergeIndex', (from, to) => {
+    setRefs((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  });
+  const rowDrag = useDragSort('[data-group-index]', 'groupIndex', moveGroupTo);
+  const dragging = cardDrag.dragging;
+  const over = cardDrag.over;
 
   const deleteRef = (ref: PageRef) => {
     setRefs((prev) => {
@@ -201,59 +151,11 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
   if (loading) return <div className="annotate-loading">Memuat {files.length} dokumen…</div>;
   if (error) return <div className="preview-error" role="alert">{error}</div>;
 
-  // Guard: buang ref yang menunjuk file terhapus (render transisi sebelum effect reload jalan)
-  const validRefs = refs.filter((r) => r.file >= 0 && r.file < files.length);
-
-  // Urutan grup file menurut kondisi refs saat ini; halaman yang diacak manual tetap satu grup.
-  const groupOrder: number[] = [];
-  for (const r of validRefs) if (!groupOrder.includes(r.file)) groupOrder.push(r.file);
-  const moveGroupTo = (gi: number, ti: number) => {
-    if (gi === ti || ti < 0 || ti >= groupOrder.length) return;
-    setRefs((prev) => moveFileGroup(prev, groupOrder[gi], groupOrder[ti], ti < gi));
-  };
-
-  const resetGroupDrag = () => {
-    groupDown.current = null;
-    groupDrag.current = null;
-    groupOver.current = null;
-    setGroupDragging(null);
-    setGroupOverIdx(null);
-  };
-  const onRowPointerDown = (e: PointerEvent<HTMLElement>, gi: number) => {
-    if ((e.target as HTMLElement).closest('button')) return;
-    groupDown.current = { gi, x: e.clientX, y: e.clientY };
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-  };
-  const onRowPointerMove = (e: PointerEvent<HTMLElement>) => {
-    const down = groupDown.current;
-    if (!down) return;
-    if (groupDrag.current === null) {
-      if (Math.abs(e.clientX - down.x) > DRAG_THRESHOLD || Math.abs(e.clientY - down.y) > DRAG_THRESHOLD) {
-        groupDrag.current = down.gi;
-        groupOver.current = down.gi;
-        setGroupDragging(down.gi);
-        setGroupOverIdx(down.gi);
-      }
-      return;
-    }
-    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-group-index]');
-    const gi = el ? Number(el.dataset.groupIndex) : null;
-    const next = gi !== null && Number.isInteger(gi) ? gi : null;
-    groupOver.current = next;
-    setGroupOverIdx(next);
-  };
-  const onRowPointerUp = () => {
-    if (groupDrag.current !== null) {
-      moveGroupTo(groupDrag.current, groupOver.current ?? groupDrag.current);
-    }
-    resetGroupDrag();
-  };
-
   return (
     <div className="split-panel">
       <div className="preview-heading">
         <span>{validRefs.length} halaman dari {files.length} dokumen</span>
-        <small>{mode === 'halaman' ? 'Seret kartu untuk mengatur urutan' : 'Gunakan ↑↓ untuk memindahkan file'}</small>
+        <small>{mode === 'halaman' ? 'Tahan lalu seret kartu untuk mengatur urutan' : 'Gunakan ↑↓ untuk memindahkan file'}</small>
       </div>
       <div className="split-tabs" role="tablist" aria-label="Mode pengurutan gabungan">
         <button role="tab" aria-selected={mode === 'halaman'} className={`split-tab ${mode === 'halaman' ? 'is-active' : ''}`} onClick={() => setMode('halaman')}>Per halaman</button>
@@ -279,14 +181,15 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
               data-merge-index={index}
               data-ref-key={key}
               className={`page-card merge-card ${over === index ? 'drop-target' : ''} ${dragging === index ? 'is-dragging' : ''}`}
-              onPointerDown={(e) => onPointerDown(e, index)}
-              onPointerMove={onPointerMove}
-              onPointerEnter={() => { if (draggingRef.current !== null) { overIndexRef.current = index; setOver(index); } }}
-              onPointerUp={() => onPointerUp(index)}
-              onPointerCancel={cleanup}
-              onLostPointerCapture={cleanup}
+              onPointerDown={(e) => { if ((e.target as HTMLElement).closest('button, .merge-delete-btn')) return; cardDrag.onPointerDown(e, index); }}
+              onPointerMove={cardDrag.onPointerMove}
+              onPointerEnter={() => cardDrag.onPointerEnter(index)}
+              onPointerUp={() => cardDrag.onPointerUp(index)}
+              onPointerCancel={cardDrag.cancel}
+              onLostPointerCapture={cardDrag.cancel}
+              onContextMenu={(e) => e.preventDefault()}
             >
-              <div className="page-thumb" onClick={() => { if (Date.now() - didDragAtRef.current < 300) return; setViewing(ref); }}>
+              <div className="page-thumb" onClick={() => { if (Date.now() - cardDrag.didDragAt() < 300) return; setViewing(ref); }}>
                 <canvas ref={(c) => { if (c) canvases.current.set(key, c); else canvases.current.delete(key); }} />
                 {!rendered.has(key) && <span className="preview-loading" aria-hidden="true">…</span>}
                 <span className="page-thumb-zoom" aria-hidden="true">⤢</span>
@@ -308,12 +211,13 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
           <div
             key={fi}
             data-group-index={gi}
-            className={`file-order-row ${groupDragging === gi ? 'is-dragging' : ''} ${groupOverIdx === gi && groupDragging !== null && groupDragging !== gi ? 'drop-target' : ''}`}
-            onPointerDown={(e) => onRowPointerDown(e, gi)}
-            onPointerMove={onRowPointerMove}
-            onPointerUp={onRowPointerUp}
-            onPointerCancel={resetGroupDrag}
-            onLostPointerCapture={resetGroupDrag}
+            className={`file-order-row ${rowDrag.dragging === gi ? 'is-dragging' : ''} ${rowDrag.over === gi && rowDrag.dragging !== null && rowDrag.dragging !== gi ? 'drop-target' : ''}`}
+            onPointerDown={(e) => { if ((e.target as HTMLElement).closest('button')) return; rowDrag.onPointerDown(e, gi); }}
+            onPointerMove={rowDrag.onPointerMove}
+            onPointerUp={() => rowDrag.onPointerUp(gi)}
+            onPointerCancel={rowDrag.cancel}
+            onLostPointerCapture={rowDrag.cancel}
+            onContextMenu={(e) => e.preventDefault()}
           >
             <span className="merge-legend-dot" style={{ background: FILE_COLORS[fi % FILE_COLORS.length] }} />
             <span className="merge-file-name">{files[fi].name}</span>

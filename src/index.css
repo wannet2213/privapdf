@@ -3,6 +3,16 @@
    White + #E5322D + Nunito, clean bright SaaS
    ============================================ */
 
+/* Nunito variable font (latin), self-hosted — nol permintaan pihak ketiga */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/nunito-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Palette */
   --bg: #ffffff;
@@ -527,7 +537,9 @@ footer span:last-child { color: var(--ink); font-weight: 700; }
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   cursor: grab;
-  touch-action: none;
+  /* Izinkan scroll lewat kartu; drag sentuh diambil alih useDragSort
+     setelah tahan (touchmove di-preventDefault saat drag aktif). */
+  touch-action: pan-x pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -667,7 +679,11 @@ footer span:last-child { color: var(--ink); font-weight: 700; }
   padding: 14px 8px;
   border-bottom: 1px solid var(--border);
   cursor: grab;
-  touch-action: none;
+  /* Sama seperti .page-card: scroll tetap jalan, drag via long-press. */
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   font-size: 14px;
   font-weight: 600;
   border-radius: var(--r-btn);
@@ -1547,7 +1563,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   max-width: 100%;
 }
 .merge-card {
-  touch-action: none;
+  touch-action: pan-x pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -1673,4 +1689,99 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============================================
+   Sign Panel (tanda tangan / stempel)
+   ============================================ */
+.sign-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sign-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+}
+.sign-swatch.is-active { border-color: var(--ink); }
+.sign-width {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sign-width.is-active { border-color: var(--accent); color: var(--accent); }
+.sign-canvas {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: #fff;
+  touch-action: none;
+  cursor: crosshair;
+}
+.sign-page-indicator { font-size: 14px; font-weight: 700; }
+.sign-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sign-stage { position: relative; display: inline-block; max-width: 100%; }
+.sign-page {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.sign-overlay {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  filter: drop-shadow(0 1px 2px rgba(29, 32, 41, 0.2));
+}
+.sign-overlay:active { cursor: grabbing; }
+.sign-upload { cursor: pointer; }
+
+
+/* Ringkasan hasil Toolkit Gambar */
+.image-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.image-result-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--band);
+}
+.image-result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.image-result-total {
+  font-weight: 800;
+  color: var(--green);
+  text-align: right;
 }

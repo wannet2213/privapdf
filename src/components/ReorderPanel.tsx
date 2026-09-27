@@ -21,7 +21,7 @@ export function ReorderPanel({ bytes, pageCount, order, onOrderChange, onProcess
     <div className="split-panel">
       <div className="preview-heading">
         <span>Susun ulang halaman</span>
-        <small>Seret untuk mengubah urutan</small>
+        <small>Tahan lalu seret untuk mengubah urutan</small>
       </div>
       <PdfPreview bytes={bytes} pages={pages} selected={selected} onToggle={() => {}} onMove={handleMove} />
       <p className="split-hint">Urutan: {order.map((p) => p + 1).join(' → ')}</p>

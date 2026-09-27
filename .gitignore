@@ -8,3 +8,6 @@ build
 public/wasm
 *.tsbuildinfo
 .DS_Store
+.commandcode
+.mimosa
+.zcodeignore

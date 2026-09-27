@@ -11,8 +11,16 @@ const crossOriginIsolationHeaders = {
 
 export default defineConfig({
   plugins: [react()],
-  server: { headers: crossOriginIsolationHeaders },
-  preview: { headers: crossOriginIsolationHeaders },
+  server: {
+    headers: crossOriginIsolationHeaders,
+    // Host tunnel/proxy publik untuk dev (Vite memblokir Host tak dikenal
+    // untuk mencegah DNS rebinding — jangan ganti dengan allowedHosts: true).
+    allowedHosts: ['test.irwannet.my.id'],
+  },
+  preview: {
+    headers: crossOriginIsolationHeaders,
+    allowedHosts: ['test.irwannet.my.id'],
+  },
   worker: { format: 'es' },
   test: { environment: 'jsdom', globals: true },
 });
