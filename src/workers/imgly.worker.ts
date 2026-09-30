@@ -5,6 +5,12 @@
  * 'unsafe-eval' / blob: di script-src.
  */
 import { removeBackground } from '@imgly/background-removal';
+import * as ort from 'onnxruntime-web';
+
+// imgly menyetel numThreads dari crossOriginIsolated (>1 di situs dengan
+// COOP/COEP) — jalur pthread ORT di nested worker bisa deadlock saat sesi
+// dibuat. Paksa 1 thread; fp16 1024² tetap selesai dalam hitungan detik.
+ort.env.wasm.numThreads = 1;
 
 function post(msg: unknown) {
   self.postMessage(msg);

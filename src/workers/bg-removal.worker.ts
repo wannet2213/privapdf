@@ -8,6 +8,9 @@ import * as ort from 'onnxruntime-web';
 import { minMaxNormalize, U2NETP_INPUT_SIZE } from '../lib/bg-removal-core';
 
 ort.env.wasm.wasmPaths = '/models/bg/';
+// Paksa 1 thread: jalur pthread ORT (numThreads > 1) di dalam nested worker
+// terkenal bisa deadlock saat sesi dibuat — dan u2netp 320² tidak butuhnya.
+ort.env.wasm.numThreads = 1;
 
 const CACHE_NAME = 'removebg-model';
 const MODEL_FILE = 'u2netp.onnx';
@@ -65,11 +68,6 @@ async function getSession(onStatus: (m: string) => void): Promise<ort.InferenceS
   const eps: string[] = [];
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) eps.push('webgpu');
   eps.push('wasm');
-  // Threaded WASM butuh crossOriginIsolated (SAB). Tanpa itu paksa 1 thread —
-  // ORT dengan default threads di lingkungan non-terisolasi bisa menggantung.
-  ort.env.wasm.numThreads = (self as { crossOriginIsolated?: boolean }).crossOriginIsolated
-    ? Math.min(4, navigator.hardwareConcurrency || 2)
-    : 1;
   const session = await ort.InferenceSession.create(bytes, { executionProviders: eps });
   sessions.set(MODEL_FILE, session);
   onStatus('Sesi siap. Menginferensi…');
