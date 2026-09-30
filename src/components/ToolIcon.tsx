@@ -21,6 +21,7 @@ export const TOOL_COLORS: Record<string, string> = {
   flatten: '#535A6C',
   'image-to-pdf': '#E84393',
   'image-toolkit': '#0E9F9F',
+  'remove-bg': '#E84393',
   'office-to-pdf': '#E5322D',
 };
 
@@ -44,6 +45,7 @@ const ICONS: Record<string, ReactElement> = {
   flatten: (<><path d="M12 4 4.5 8 12 12l7.5-4z" /><path d="M4.5 13 12 17l7.5-4" /></>),
   'image-to-pdf': (<><rect x="2.5" y="4" width="12.5" height="12.5" rx="2" /><circle cx="6.8" cy="8.3" r="1.3" /><path d="M3.5 14.5l3.5-3.5 3 3 1.8-1.8 2.7 2.7" /><path d="M18.5 8.5V17a3 3 0 0 1-3 3H8" /></>),
   'image-toolkit': (<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15.5 16 10.5 5 21" /><path d="M8 21h13" strokeDasharray="2.5 2.5" /></>),
+  'remove-bg': (<><path d="M6 3h8.5L19 7.5V21H6z" /><path d="M14.5 3v4.5H19" /><path d="M9.5 13.5 13.5 9.5" /><path d="m13 7 4 4" /><path d="M8.5 17.5h.01" strokeWidth={2.6} /></>),
   'office-to-pdf': (<><rect x="3.5" y="3.5" width="17" height="17" rx="2" /><path d="M3.5 9.5h17" /><path d="M9.5 9.5v11" /></>),
 };
 

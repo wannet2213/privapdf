@@ -6,6 +6,8 @@ dist
 build
 .vercel
 public/wasm
+public/models
+public/imgly
 *.tsbuildinfo
 .DS_Store
 .commandcode

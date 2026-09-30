@@ -1,8 +1,10 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkatmu. Kini 20 tool: PDF (merge/split/rotate/…), formulir, tanda tangan, dan toolkit gambar.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkatmu. Kini 21 tool: PDF (merge/split/rotate/…), formulir, tanda tangan, toolkit gambar, hapus latar.
 
-## Daftar Tool (20)
+Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
+
+## Daftar Tool (21)
 
 | Tool | Fungsi |
 | --- | --- |
@@ -25,6 +27,7 @@ Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanp
 | Tanda tangan / stempel | Gambar tangan di canvas atau unggah PNG/JPG, tempel per halaman |
 | Gambar ke PDF | PNG/JPEG → PDF |
 | Toolkit gambar | Kompres, resize massal, konversi PNG/JPEG/WebP; re-encode menghapus EXIF |
+| Hapus latar | AI (U²-Net/ISNet, latar apa pun) atau mode warna solid → PNG transparan |
 | Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (opsional — lihat bawah) |
 
 Catatan UX sentuh: **menyeret kartu/baris di layar sentuh = tahan dulu (±0,25 detik) baru seret**; geser sebelum itu tetap berfungsi sebagai scroll. Di mouse, drag langsung.
@@ -57,6 +60,19 @@ npm run setup:office
 - Pemakaian pertama: browser memuat ±250 MB dan mengompilasi WASM — butuh waktu puluhan detik dan RAM besar. Konversi berikutnya jauh lebih cepat (HTTP cache + engine hangat selama sesi).
 - Tanpa langkah ini HANYA tool "Office ke PDF" yang gagal saat dipakai; tool lain normal.
 
+### Opsional: model AI hapus latar
+
+```bash
+npm run setup:models   # u2netp (Apache-2.0, ±4 MB) + runtime ONNX → public/models/bg/ (±30 MB)
+npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/imgly/ (±160 MB)
+```
+
+- **Seimbang / Ringan (imgly)** — ISNet fp16 ±22 MB / quint8 ±11 MB, default tool. Aset di-self-host dari CDN resmi imgly; tidak ada request pihak ketiga saat runtime.
+- **Cepat** — u2netp ±4 MB, model Apache-2.0 di worker ORT milik sendiri.
+- Semua inferensi berjalan di worker, tanpa melonggarkan CSP.
+- Tanpa langkah ini, tab "Warna solid" pada tool Hapus latar tetap berfungsi.
+- Catatan lisensi: penggunaan `@imgly/background-removal` membuat seluruh aplikasi ini berlisensi AGPL-3.0-or-later.
+
 ## Development lewat tunnel / domain sendiri
 
 Vite menolak request dengan `Host` tak dikenal (proteksi DNS rebinding). Tambahkan domainmu ke `server.allowedHosts` di `vite.config.ts` — `test.irwannet.my.id` sudah terdaftar sebagai contoh. Jangan gunakan `allowedHosts: true`.
@@ -67,6 +83,8 @@ Vite menolak request dengan `Host` tak dikenal (proteksi DNS rebinding). Tambahk
 | --- | --- |
 | `npm run dev` | Dev server (sudah dengan header COOP/COEP untuk WASM) |
 | `npm run setup:office` | Salin aset Office WASM + patch timeout (opsional) |
+| `npm run setup:models` | Unduh model AI hapus latar + runtime ONNX (opsional) |
+| `npm run setup:imgly` | Unduh aset imgly background-removal (opsional) |
 | `npm run check` | Type-check TypeScript |
 | `npm test` | Seluruh test (vitest) |
 | `npm run build` | Build produksi ke `dist/` |
@@ -115,6 +133,8 @@ npm audit       # 0 kerentanan
 | Path | Alasan | Cara mendapatkan |
 | --- | --- | --- |
 | `public/wasm/office/` | Aset LibreOffice WASM ±250 MB — GitHub menolak file > 100 MB, CF Pages > 25 MB | `npm run setup:office` |
+| `public/models/bg/` | Model u2netp + runtime ONNX ±30 MB | `npm run setup:models` |
+| `public/imgly/` | Aset @imgly/background-removal ±160 MB | `npm run setup:imgly` |
 | `dist/` | Hasil build | `npm run build` |
 
 ## Privasi dan keamanan

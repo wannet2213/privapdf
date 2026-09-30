@@ -24,5 +24,6 @@ export const tools: Tool[] = [
   { id: 'flatten', label: 'Ratakan (flatten)', description: 'Kunci formulir dan anotasi menjadi konten statis yang tidak bisa diubah.', accept: PDF },
   { id: 'image-to-pdf', label: 'Gambar ke PDF', description: 'Buat PDF dari PNG atau JPEG.', accept: IMG },
   { id: 'image-toolkit', label: 'Toolkit gambar', description: 'Kompres, resize massal, dan konversi PNG/JPEG/WebP. Re-encode menghapus EXIF (GPS, info kamera).', accept: IMG_TOOLKIT },
+  { id: 'remove-bg', label: 'Hapus latar', description: 'Buat latar warna solid jadi transparan (foto produk, logo). Pilih warna + toleransi, hasil PNG.', accept: IMG },
   { id: 'office-to-pdf', label: 'Office ke PDF', description: 'Konversi Word, Excel, PowerPoint, ODT/ODS/ODP, RTF, CSV, atau HTML secara lokal.', accept: OFFICE },
 ];

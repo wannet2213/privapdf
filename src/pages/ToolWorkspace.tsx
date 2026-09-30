@@ -20,6 +20,7 @@ import { stampImage, type StampOptions } from '../engines/pdf-native';
 import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
+import { RemoveBgPanel } from '../components/RemoveBgPanel';
 
 const METADATA_FIELDS: Field[] = [
   { name: 'title', label: 'Judul', type: 'text', placeholder: 'Judul dokumen' },
@@ -249,6 +250,11 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
+  const handleRemoveBg = (blob: Blob) => {
+    downloadBlobs([blob], [`${files[0].name.replace(/\.[^.]+$/, '')}-transparan.png`], 'image/png');
+    setStatus('Selesai. PNG transparan telah diunduh.');
+  };
+
   const handleUnlock = () => runWorker('unlock', [files[0].bytes], unlockPassword.trim() ? { password: unlockPassword } : undefined);
 
   const handleProtect = () => {
@@ -321,6 +327,9 @@ export function ToolWorkspace() {
       <ImageToolkitPanel files={files} onProcess={handleImageToolkit} />
     )}
 
+    {files.length > 0 && toolId === 'remove-bg' && (
+      <RemoveBgPanel bytes={files[0].bytes} onProcess={handleRemoveBg} busy={busy} />
+    )}
     {files.length > 0 && toolId === 'fill-form' && (
       <FormFillPanel bytes={files[0].bytes} onProcess={handleFormDownload} busy={busy} />
     )}

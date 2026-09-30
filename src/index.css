@@ -1785,3 +1785,34 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   color: var(--green);
   text-align: right;
 }
+
+/* Hapus latar: latar papan catur untuk menampilkan transparansi */
+.removebg-stage {
+  display: inline-block;
+  max-width: 100%;
+  background-image: conic-gradient(#e2e5ec 0 25%, #ffffff 0 50%, #e2e5ec 0 75%, #ffffff 0);
+  background-size: 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 6px;
+}
+.removebg-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 440px;
+  height: auto;
+}
+.removebg-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.removebg-color-row input[type='color'] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  cursor: pointer;
+}
