@@ -8,7 +8,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
-import { createGzip } from 'node:zlib';
+import { constants as zlibConstants, createBrotliCompress, createGzip } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -72,5 +72,32 @@ for (const name of gzipTargets) {
   const gz = statSync(target).size;
   const mb = (n) => (n / 1048576).toFixed(1);
   console.log(`gzip: ${name} ${mb(size)} MB → ${mb(gz)} MB (${((gz / size) * 100).toFixed(1)}%) ${Date.now() - started}ms`);
+}
+
+// Salinan .br (brotli) — untuk wasm/data biner 15-25% lebih kecil dari .gz,
+// jadi unduhan pertama aset 237 MB jadi lebih ringan lagi. Disajikan oleh
+// scripts/serve-dist.mjs bila klien mengirim Accept-Encoding: br; nginx tanpa
+// modul brotli mengabaikannya dan tetap memakai .gz. Kualitas 10 (bukan 11):
+// ukuran nyaris sama, waktu kompresi ±2x lebih cepat pada 141 MB.
+for (const name of gzipTargets) {
+  const source = join(dest, name);
+  const target = source + '.br';
+  if (!existsSync(source)) continue;
+  if (existsSync(target) && statSync(target).mtimeMs >= statSync(source).mtimeMs) {
+    console.log('brotli: sudah terbaru, dilewati —', name);
+    continue;
+  }
+  const size = statSync(source).size;
+  const started = Date.now();
+  const compressor = createBrotliCompress({
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: 10,
+      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: size,
+    },
+  });
+  await pipeline(createReadStream(source), compressor, createWriteStream(target));
+  const br = statSync(target).size;
+  const mb = (n) => (n / 1048576).toFixed(1);
+  console.log(`brotli: ${name} ${mb(size)} MB → ${mb(br)} MB (${((br / size) * 100).toFixed(1)}%) ${Date.now() - started}ms`);
 }
 console.log('Office WASM siap di public/wasm/office — restart dev server bila sedang berjalan.');
