@@ -1,6 +1,6 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkatmu. Kini 21 tool: PDF (merge/split/rotate/…), formulir, tanda tangan, toolkit gambar, hapus latar.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 21 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, hapus latar, Office ke PDF.
 
 Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
 
@@ -32,59 +32,163 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 
 Catatan UX sentuh: **menyeret kartu/baris di layar sentuh = tahan dulu (±0,25 detik) baru seret**; geser sebelum itu tetap berfungsi sebagai scroll. Di mouse, drag langsung.
 
-## Prasyarat
+## Mulai cepat
 
-- Node.js `^20.19.0` atau `>=22.12.0` (syarat Vite 8; dikembangkan dengan Node 24)
-- npm
-
-## Menjalankan dari clone baru
+Prasyarat: **Node.js `^20.19.0` atau `>=22.12.0`** (syarat Vite 8) dan npm.
 
 ```bash
-git clone <url-repo> privapdf
+git clone <url-repo ini> privapdf
 cd privapdf
 npm ci
 npm run dev
 ```
 
-Semua tool langsung jalan — **kecuali "Office ke PDF"**, karena aset LibreOffice WASM sengaja tidak ikut repo (lihat [File yang tidak ikut repo](#file-yang-tidak-ikut-repo-by-design)).
+Buka `http://localhost:5173` — hampir semua tool langsung jalan. **Kecuali "Office ke PDF"** (dan sebagian mode AI "Hapus latar"), karena asetnya sengaja tidak ikut repo — aktifkan dengan langkah opsional di bawah.
 
-### Opsional: aktifkan Office ke PDF (~250 MB)
+### Opsional 1: Office ke PDF (aset ±237 MB)
 
 ```bash
 npm run setup:office
 ```
 
-- Menyalin 5 aset dari `node_modules` ke `public/wasm/office/` (folder gitignored, idempoten).
-- Membuat berkas `.gz` untuk tiap aset (237 MB → ±75 MB) supaya nginx dapat menyajikannya lewat `gzip_static`; `soffice.wasm` turun dari 141 MB ke 47,5 MB sehingga bisa di-cache Cloudflare.
-- Menaikkan batas waktu inisialisasi WASM di worker dari 2 menit → 10 menit — penting saat aset diambil lewat tunnel/upload lambat (batas bawaan vendor 2 menit tidak cukup).
-- Urutannya penting: `.gz` dibuat **setelah** patch timeout, kalau tidak berkas terkompresi memuat versi yang belum ter-patch.
-- **Restart dev server** setelahnya.
-- Pemakaian pertama: browser memuat ±250 MB dan mengompilasi WASM — butuh waktu puluhan detik dan RAM besar. Konversi berikutnya jauh lebih cepat (HTTP cache + engine hangat selama sesi).
-- Tanpa langkah ini HANYA tool "Office ke PDF" yang gagal saat dipakai; tool lain normal.
+Yang dilakukan script (idempoten — aman dijalankan berulang):
 
-### Opsional: model AI hapus latar
+- Menyalin 5 aset LibreOffice WASM dari `node_modules` ke `public/wasm/office/` (folder gitignored).
+- Menaikkan batas waktu inisialisasi WASM di worker dari 2 menit → 10 menit (penting saat koneksi lambat).
+- Membuat salinan terkompresi **untuk tiap aset**: `.gz` (237 MB → ±75 MB) dan `.br` brotli (→ **±50 MB**) — server yang mendukung prakompresi akan mengunduh versi terkecil yang didukung browser pengunjung. Urutannya penting: kompresi dibuat **setelah** patch timeout.
+- **Restart dev server** setelahnya.
+
+Pemakaian pertama di browser: mengunduh ±50 MB (brotli) lalu mengompilasi WASM — progress-nya tampil di layar. Pemakaian berikutnya jauh lebih cepat (HTTP cache + engine tetap hangat selama sesi). Tanpa langkah ini HANYA tool "Office ke PDF" yang tidak jalan; tool lain normal.
+
+### Opsional 2: model AI hapus latar
 
 ```bash
 npm run setup:models   # u2netp (Apache-2.0, ±4 MB) + runtime ONNX → public/models/bg/ (±30 MB)
 npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/imgly/ (±160 MB)
 ```
 
-- **Seimbang / Ringan (imgly)** — ISNet fp16 ±22 MB / quint8 ±11 MB, default tool. Aset di-self-host dari CDN resmi imgly; tidak ada request pihak ketiga saat runtime.
-- **Cepat** — u2netp ±4 MB, model Apache-2.0 di worker ORT milik sendiri.
-- Semua inferensi berjalan di worker, tanpa melonggarkan CSP.
+- **Seimbang / Ringan (imgly)** — ISNet fp16 ±22 MB / quint8 ±11 MB, default tool.
+- **Cepat** — u2netp ±4 MB.
 - Tanpa langkah ini, tab "Warna solid" pada tool Hapus latar tetap berfungsi.
-- Catatan lisensi: penggunaan `@imgly/background-removal` membuat seluruh aplikasi ini berlisensi AGPL-3.0-or-later.
 
-## Development lewat tunnel / domain sendiri
+## Deploy — pilih salah satu cara
 
-Vite menolak request dengan `Host` tak dikenal (proteksi DNS rebinding). Tambahkan domainmu ke `server.allowedHosts` di `vite.config.ts` — `test.irwannet.my.id` sudah terdaftar sebagai contoh. Jangan gunakan `allowedHosts: true`.
+Hasil build adalah **situs statis murni** (`dist/`) — tidak ada backend, tidak ada database. Yang dibutuhkan penyaji:
 
-## Perintah
+1. **Header COOP/COEP** (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`) — **wajib** untuk Office ke PDF; tanpanya browser tidak memberi SharedArrayBuffer dan fitur itu mati.
+2. **SPA fallback** — semua rute tak dikenal menjawab `index.html` (status 200).
+3. **MIME benar** — `.wasm` sebagai `application/wasm`; jangan menyajikan berkas `.ts` mentah.
+
+### Cara 1 — server bawaan `npm run serve` (paling simpel, tanpa nginx/Caddy)
+
+```bash
+npm run build
+npm run serve                  # mendengarkan di http://0.0.0.0:8080
+PORT=9000 npm run serve        # port lain
+HOST=127.0.0.1 npm run serve   # hanya lokal
+```
+
+Server kecil tanpa dependensi (`scripts/serve-dist.mjs`) sudah mengurus semuanya: header keamanan + COOP/COEP, SPA fallback, MIME WASM, cache (aset ter-hash `immutable`), dan negosiasi `.br` → `.gz` → mentah.
+
+Catatan: server ini **HTTP polos**. Untuk dipakai publik, taruh di balik HTTPS (reverse proxy, Cloudflare Tunnel, dsb.) — selain untuk keamanan, Office ke PDF hanya aktif di konteks aman (HTTPS atau `localhost`). Karena sekarang ada proses yang harus hidup, pasang service manager (`systemd`, `pm2`, dsb.) bila dipakai serius.
+
+### Cara 2 — nginx atau Caddy di VPS sendiri
+
+Build lalu unggah `dist/` ke server, misalnya ke `/var/www/privapdf`:
+
+```bash
+npm run setup:office   # aset WASM + .gz/.br (wajib tiap deploy: public/wasm gitignored)
+npm run build          # tsc + vite build + pemeriksaan dist
+rsync -a --delete dist/ user@server:/var/www/privapdf/
+```
+
+`nginx` (`/etc/nginx/conf.d/privapdf.conf`):
+
+```nginx
+server {
+    listen 80;
+    server_name contoh-domain-anda.com;      # ganti dengan domainmu
+    root /var/www/privapdf;
+    index index.html;
+
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    add_header Cross-Origin-Embedder-Policy require-corp always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options DENY always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
+    gzip_static on;                          # menyajikan .gz hasil setup:office
+
+    location / {
+        try_files $uri $uri/ /index.html;    # SPA fallback
+    }
+}
+```
+
+`Caddy` (Caddyfile):
+
+```caddyfile
+contoh-domain-anda.com {
+    root * /var/www/privapdf
+    try_files {path} /index.html
+    header {
+        Cross-Origin-Opener-Policy same-origin
+        Cross-Origin-Embedder-Policy require-corp
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        X-Frame-Options DENY
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+    file_server {
+        precompressed gzip br
+    }
+}
+```
+
+Caddy otomatis mengurus HTTPS. Untuk nginx + HTTPS, letakkan sertifikat (certbot) seperti biasa. Jika mengaktifkan brotli statis (`brotli_static on;` atau Caddy `precompressed br`), pengunjung mendapat unduhan ±50 MB alih-alih ±75 MB.
+
+### Cara 3 — Cloudflare Pages / Vercel / Netlify (host statis gratis)
+
+Repo sudah menyertakan `public/_headers`, `public/_redirects`, dan `vercel.json` — COOP/COEP, header keamanan, dan SPA fallback ikut otomatis. Build command `npm run build`, output `dist`.
+
+**Batasan keras:** platform Pages menolak berkas statis > 25 MB, sedangkan aset Office 237 MB. Hapus dulu sebelum build:
+
+```bash
+rm -rf public/wasm/office
+npm run build
+```
+
+Hasilnya semua tool jalan **kecuali Office ke PDF**. Memunculkannya kembali butuh hosting aset terpisah + perubahan kode — tidak disarankan untuk pemula.
+
+### Fitur vs syarat hosting
+
+| Fitur | Syarat |
+| --- | --- |
+| 19 tool PDF/gambar | Hosting statis biasa — tanpa syarat khusus |
+| Hapus latar (AI) | Aset model ter-host; Cache API butuh konteks aman (tanpa itu model terunduh ulang tiap sesi, tetap jalan) |
+| Office ke PDF | Aset WASM ter-host + **konteks aman (HTTPS/localhost) + header COOP/COEP** + browser modern (Chrome/Edge/Firefox terbaru). Webview/pratinjau tersemat tidak didukung — aplikasi menolak dengan pesan jelas, bukan menggantung |
+
+### Pemeriksaan hasil build (`scripts/check-dist.mjs`)
+
+`npm run build` **menolak** hasil yang akan rusak di produksi: ada `.ts`/`.tsx` mentah di `dist/`, aset merujuk `assets/*.ts`, `new Worker(<var>)` berisi `data:` URL, atau chunk worker hilang. Ini nyata: bug worker pernah lolos `tsc`, lolos seluruh test, dan lolos uji manual di dev — lalu mati begitu di-deploy. `npm run check:dist` menjalankan pemeriksaan yang sama tanpa build penuh.
+
+### Verifikasi setelah deploy
+
+```bash
+curl -sI https://domain-anda.com/ | grep -i cross-origin                 # COOP/COEP tampil
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
+  https://domain-anda.com/wasm/office/soffice.wasm                       # 200 application/wasm
+curl -s https://domain-anda.com/ | grep -c googleapis                    # harus 0
+```
+
+## Pengembangan
 
 | Perintah | Fungsi |
 | --- | --- |
 | `npm run dev` | Dev server (sudah dengan header COOP/COEP untuk WASM) |
-| `npm run setup:office` | Salin aset Office WASM + patch timeout + siapkan berkas `.gz` (opsional) |
+| `npm run serve` | Sajikan `dist/` produksi di satu port (lihat Cara 1) |
+| `npm run setup:office` | Salin aset Office WASM + patch timeout + siapkan `.gz`/`.br` (opsional) |
 | `npm run setup:models` | Unduh model AI hapus latar + runtime ONNX (opsional) |
 | `npm run setup:imgly` | Unduh aset imgly background-removal (opsional) |
 | `npm run check` | Type-check TypeScript |
@@ -93,51 +197,11 @@ Vite menolak request dengan `Host` tak dikenal (proteksi DNS rebinding). Tambahk
 | `npm run build` | Build produksi ke `dist/` + periksa hasil build |
 | `npm audit` | Cek kerentanan dependensi |
 
-## Deploy production (VPS ini)
+Validasi wajib sebelum push: `npm run check`, `npm test`, `npm audit` (0 kerentanan).
 
-Situs ini **bukan** Cloudflare Pages dan bukan Vercel. Yang tayang: **nginx native** menyajikan hasil build statis dari `/var/www/privapdf`, diakses publik lewat **Cloudflare Tunnel** (remote-managed) → origin port 80.
+**Dev lewat tunnel/domain sendiri:** Vite menolak `Host` tak dikenal (proteksi DNS rebinding). Tambahkan domainmu ke `server.allowedHosts` di `vite.config.ts` — jangan pakai `allowedHosts: true`.
 
-Tidak ada proses aplikasi, tidak ada port khusus, dan tidak ada unit systemd untuk situs ini. Karena itu `npm run dev` **tidak pernah** dijalankan di server — dev server hanya untuk mengembangkan di mesin sendiri.
-
-| | |
-| --- | --- |
-| Penyaji | nginx, `root /var/www/privapdf` (`/etc/nginx/conf.d/privapdf.conf`) |
-| Dipilih lewat | `server_name`, **bukan port** — `privapdf.my.id` berbagi `listen 80` dengan vhost lain |
-| Proses aplikasi | tidak ada (tanpa Node, tanpa systemd, tanpa Docker) |
-| Header COOP/COEP | wajib, diatur di `privapdf.conf`; tanpanya Office WASM mati |
-| Kompresi | `gzip_static on;` — berkas `.gz` disiapkan oleh `npm run setup:office` |
-| Ingress tunnel | dikelola dari dashboard Cloudflare Zero Trust, jadi **tidak ada** berkas config tunnel di VPS |
-
-Hanya `privapdf.my.id` yang punya DNS. `www.privapdf.my.id`, `privapdf.web.id`, dan `www.privapdf.web.id` masih terdaftar di `server_name` tetapi belum ada DNS/tunnel — memang belum bisa dibuka.
-
-### Langkah deploy
-
-```bash
-cd /root/privapdf
-git pull --ff-only origin main
-npm ci
-npm run setup:office          # aset WASM + berkas .gz (wajib tiap deploy: public/wasm gitignored)
-npm run build                 # tsc + vite build + pemeriksaan dist
-sudo rsync -a --delete dist/ /var/www/privapdf/
-sudo chown -R www-data:www-data /var/www/privapdf
-```
-
-nginx tidak perlu di-reload — berkas disajikan langsung dari disk. `rsync -a --delete` dipakai (bukan `rm -rf` lalu `cp`) supaya tidak ada jendela situs mengembalikan 404 saat deploy.
-
-### Pemeriksaan hasil build (`scripts/check-dist.mjs`)
-
-`npm run build` **menolak** hasil yang akan rusak di produksi. Ini bukan hiasan: bug worker pernah lolos `tsc`, lolos 160 test vitest, dan lolos uji manual di `npm run dev` — lalu mati begitu di-deploy, karena yang rusak bukan logika melainkan perilaku bundling.
-
-| Pemeriksaan (semua fatal) | Kenapa |
-| --- | --- |
-| Tidak ada berkas `.ts`/`.tsx` mentah di `dist/` | nginx memetakan `.ts` → `video/mp2t` (lihat `mime.types`), jadi worker mati di produksi |
-| Tidak ada aset yang merujuk `assets/*.ts` | rujukan itu berakhir `video/mp2t`/404 di produksi |
-| Tidak ada `new Worker(<var>)` yang isinya `data:` URL | CSP `worker-src 'self' blob:` menolak `data:` |
-| Chunk worker wajib ada (Hapus Latar ×2, worker PDF, worker pdf.js) | menangkap varian `data:` yang di-inline Vite (worker < 4 kB) |
-
-`npm run check:dist` menjalankan pemeriksaan yang sama tanpa build penuh.
-
-Aturan yang dijaga: `new URL(...)` **wajib inline** di dalam `new Worker(...)`. Kalau disimpan ke variabel lebih dulu, Vite tidak mengenalinya sebagai worker.
+**Aturan worker yang dijaga `check-dist`:** `new URL(...)` wajib inline di dalam `new Worker(...)`. Disimpan ke variabel dulu = Vite memperlakukannya sebagai aset biasa, `.ts` mentah ikut ke dist, worker mati di produksi.
 
 ```ts
 // benar — Vite membundelnya jadi chunk worker ter-hash
@@ -148,33 +212,11 @@ const url = new URL('./worker.ts', import.meta.url);
 new Worker(url, { type: 'module' });
 ```
 
-### Verifikasi setelah deploy
-
-```bash
-curl -s https://privapdf.my.id/ | grep -o 'index-[A-Za-z0-9_-]*\.js'   # hash bundle baru
-curl -s https://privapdf.my.id/ | grep -c googleapis                    # harus 0
-curl -sI https://privapdf.my.id/ | grep -i cross-origin                 # COOP/COEP
-curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
-  https://privapdf.my.id/wasm/office/soffice.wasm                        # 200 application/wasm
-```
-
-### Berkas platform lain
-
-`vercel.json`, `public/_headers`, dan `public/_redirects` berformat Vercel/Cloudflare Pages. Di nginx ketiganya **inert** — header keamanan dan SPA fallback ditangani `privapdf.conf`. Dipertahankan hanya agar `dist/` masih bisa di-host di platform bergaya Pages.
-
-## Validasi sebelum push
-
-```bash
-npm run check   # wajib lulus
-npm test        # wajib lulus
-npm audit       # 0 kerentanan
-```
-
-## File yang tidak ikut repo (by design)
+### File yang tidak ikut repo (by design)
 
 | Path | Alasan | Cara mendapatkan |
 | --- | --- | --- |
-| `public/wasm/office/` | Aset LibreOffice WASM 237 MB + berkas `.gz` ±75 MB — GitHub menolak file > 100 MB | `npm run setup:office` |
+| `public/wasm/office/` | Aset LibreOffice WASM 237 MB + salinan `.gz`/`.br` — GitHub menolak file > 100 MB | `npm run setup:office` |
 | `public/models/bg/` | Model u2netp + runtime ONNX ±30 MB | `npm run setup:models` |
 | `public/imgly/` | Aset @imgly/background-removal ±160 MB | `npm run setup:imgly` |
 | `dist/` | Hasil build | `npm run build` |
@@ -187,12 +229,14 @@ Laporan audit keamanan: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) (snapshot pada 
 
 ## Troubleshooting
 
-- **Office gagal/timeout**: jalankan `npm run setup:office`, restart dev server, pastikan HTTPS + header COOP/COEP aktif dan browser mendukung WASM/Worker. Pemakaian pertama memang lambat (237 MB, ±75 MB setelah gzip). Batas konversi 10 menit, dan aset mulai diunduh begitu file dipilih — jadi menunggu sebentar sebelum menekan tombol konversi membuatnya jauh lebih cepat.
-- **Build ditolak `scripts/check-dist.mjs`**: ada worker yang tidak dikenali Vite. Perbaiki dengan pola `new Worker(new URL(...))` **inline**, bukan URL yang disimpan ke variabel dulu. Jangan lewati pemeriksaan ini: kalau dipaksa deploy, fiturnya mati hanya di produksi.
+- **Office ke PDF menolak dengan pesan SharedArrayBuffer / crossOriginIsolated**: kamu membuka lewat webview/pratinjau tersemat atau situs tanpa HTTPS + COOP/COEP. Buka lewat browser biasa (Chrome/Edge/Firefox terbaru) via HTTPS atau `localhost`, dan pastikan penyaji mengirim kedua header tersebut.
+- **Office lambat/gagal**: jalankan `npm run setup:office`, restart dev server. Pemakaian pertama memang mengunduh ±50 MB (brotli) + kompilasi WASM — progres tampil di layar; aset mulai diunduh begitu file dipilih, jadi jeda sebentar sebelum menekan tombol konversi mempercepat. Batas konversi 10 menit.
+- **Proses tampak berhenti**: bila tidak ada kemajuan ±20 detik, aplikasi menampilkan petunjuk muat ulang di baris status — refresh halaman lalu ulangi.
+- **Build ditolak `scripts/check-dist.mjs`**: ada worker yang tidak dikenali Vite. Perbaiki dengan pola `new Worker(new URL(...))` **inline** (lihat Pengembangan). Jangan dipaksa deploy — fiturnya mati hanya di produksi.
 - **"Blocked request. This host is not allowed"**: tambahkan domain ke `server.allowedHosts` di `vite.config.ts`, restart dev server.
-- **Deep link 404**: pastikan `try_files $uri $uri/ /index.html` masih ada di `/etc/nginx/conf.d/privapdf.conf`.
-- **Aset `.ts` disajikan sebagai `video/mp2t`**: itu pemetaan bawaan nginx, bukan kerusakan konfigurasi. Yang salah adalah `.ts` mentah ikut ke `dist/` — `scripts/check-dist.mjs` yang mencegahnya.
-- **File ditolak**: periksa ekstensi dan isi file; file rusak atau ekstensi tidak cocok sengaja ditolak (magic bytes diverifikasi).
+- **Deep link 404**: pastikan SPA fallback aktif (`try_files $uri $uri/ /index.html` di nginx; `_redirects`/`vercel.json` di platform Pages).
+- **Aset `.ts` disajikan sebagai `video/mp2t`**: pemetaan bawaan nginx — yang salah adalah `.ts` mentah ikut ke `dist/`; `scripts/check-dist.mjs` yang mencegahnya.
+- **File ditolak**: file rusak atau ekstensi tidak cocok sengaja ditolak (magic bytes diverifikasi).
 - **Drag tidak jalan di HP**: tahan kartu ±0,25 detik sampai terlihat "terangkat", baru seret.
 - **Isi formulir kosong**: PDF bukan AcroForm (tidak punya field). Gunakan tanda tangan untuk mengisi manual, atau flatten untuk mengunci anotasi.
 - **Aset lama saat deploy**: unregister service worker lalu reload setelah deployment.
