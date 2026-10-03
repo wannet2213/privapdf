@@ -73,7 +73,7 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (req.operation === 'image-to-pdf') {
       outputs = [await imageToPdf(req.inputs[0], (req.options?.type as 'png' | 'jpg') || 'png')];
     } else if (req.operation === 'office-to-pdf') {
-      const result = await officeToPdf(req.inputs[0], String(req.options?.filename || 'document.docx'), (percent, message) => send({ jobId: req.jobId, type: 'progress', phase: 'process', progress: percent / 100, error: message }));
+      const result = await officeToPdf(req.inputs[0], String(req.options?.filename || 'document.docx'), (percent, status) => send({ jobId: req.jobId, type: 'progress', phase: 'process', progress: percent / 100, status }));
       outputs = [result.data as ArrayBuffer];
       outputNames = [result.filename];
     } else if (req.operation === 'delete-pages') {
@@ -112,9 +112,9 @@ self.onmessage = async (e: MessageEvent) => {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }
 
-    send({ jobId: req.jobId, type: 'progress', phase: 'process', progress: .8 });
-    send({ jobId: req.jobId, type: 'progress', phase: 'sanitize', progress: .9 });
-    send({ jobId: req.jobId, type: 'progress', phase: 'finalize', progress: 1 });
+    send({ jobId: req.jobId, type: 'progress', phase: 'process', progress: .8, status: 'Memproses dokumen…' });
+    send({ jobId: req.jobId, type: 'progress', phase: 'sanitize', progress: .9, status: 'Pemeriksaan akhir…' });
+    send({ jobId: req.jobId, type: 'progress', phase: 'finalize', progress: 1, status: 'Menyelesaikan…' });
     send({ jobId: req.jobId, type: 'result', outputs, outputNames }, outputs);
   } catch (err) {
     send(errorEvent(req.jobId, err instanceof Error ? err.message : 'Pemrosesan gagal.'));

@@ -6,6 +6,7 @@ import { PDFDocument } from 'pdf-lib';
 import { runJob } from '../engine/engine-client';
 import type { Phase, SplitOptions } from '../engine/types';
 import { filterSupportedFiles } from '../lib/validation';
+import { uid } from '../lib/uid';
 import { createZip } from '../lib/zip';
 import { SplitPanel } from '../components/SplitPanel';
 import { PageSelectPanel } from '../components/PageSelectPanel';
@@ -22,6 +23,9 @@ import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
 import { RemoveBgPanel } from '../components/RemoveBgPanel';
 import { preloadOfficeConverter } from '../engines/office-native';
+
+const STALL_AFTER_MS = 20000;
+const STALL_HINT = ' — tidak ada kemajuan ±20 detik. Bila terus berhenti, muat ulang halaman (refresh) lalu ulangi proses.';
 
 const METADATA_FIELDS: Field[] = [
   { name: 'title', label: 'Judul', type: 'text', placeholder: 'Judul dokumen' },
@@ -60,6 +64,8 @@ export function ToolWorkspace() {
   const [pageCount, setPageCount] = useState(0);
   const [reorderOrder, setReorderOrder] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
+  const [stalled, setStalled] = useState(false);
+  const lastProgressRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const [dropRejected, setDropRejected] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
@@ -129,11 +135,21 @@ export function ToolWorkspace() {
 
   const runWorker = async (operation: string, inputs: ArrayBuffer[], options?: Record<string, unknown>, mime = 'application/pdf', defaultExt = 'pdf', zipOutput = false) => {
     setBusy(true); setPhase(undefined); setStatus('Memproses…');
+    setStalled(false);
+    lastProgressRef.current = Date.now();
+    // Pemantau kemajuan: bila tidak ada event progres selama STALL_AFTER_MS,
+    // tampilkan petunjuk muat-ulang di baris status (pernah terjadi: inisialisasi
+    // WASM menggantung tanpa pesan apa pun di konteks tanpa SharedArrayBuffer).
+    const stallTimer = window.setInterval(() => {
+      if (Date.now() - lastProgressRef.current >= STALL_AFTER_MS) setStalled(true);
+    }, 5000);
     try {
       let outputNames: string[] | undefined;
-      const outputs = await runJob({ jobId: crypto.randomUUID(), operation: operation as never, inputs, options } as never, (event: { type: string; phase?: Phase; progress?: number; outputNames?: string[] }) => {
+      const outputs = await runJob({ jobId: uid(), operation: operation as never, inputs, options } as never, (event: { type: string; phase?: Phase; progress?: number; outputNames?: string[]; status?: string }) => {
         setPhase(event.phase); outputNames = event.outputNames;
-        if (event.type === 'progress') setStatus(`${event.phase} · ${Math.round((event.progress || 0) * 100)}%`);
+        lastProgressRef.current = Date.now();
+        setStalled(false);
+        if (event.type === 'progress') setStatus(event.status ?? `${event.phase ?? 'Memproses'} · ${Math.round((event.progress || 0) * 100)}%`);
       });
       const names = outputNames?.length ? outputNames : outputs.map((_, i) => `${files[0]?.name?.replace(/\.[^.]+$/, '') || 'document'}-${i + 1}.${defaultExt}`);
       if (zipOutput && outputs.length > 1) {
@@ -146,7 +162,8 @@ export function ToolWorkspace() {
         setStatus(`Selesai. ${outputs.length} file telah diunduh.`);
       }
     } catch (e) { setStatus(e instanceof Error ? e.message : 'Pemrosesan gagal.'); }
-    setBusy(false);
+    clearInterval(stallTimer);
+    setBusy(false); setStalled(false);
   };
 
   const handleSplit = (options: SplitOptions) => runWorker('split', [files[0].bytes], { ...options }, 'application/pdf', 'pdf', options.asZip === true);
@@ -403,7 +420,7 @@ export function ToolWorkspace() {
     )}
 
     <div className="status" role="status" aria-live="polite">
-      <span className={phase ? 'pulse' : ''} />{status}
+      <span className={phase ? 'pulse' : ''} />{status}{stalled ? STALL_HINT : ''}
     </div>
   </div>;
 }

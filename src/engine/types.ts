@@ -28,6 +28,8 @@ export type JobEvent = {
   type: 'progress' | 'result' | 'error';
   phase?: Phase;
   progress?: number;
+  /** Kalimat aktivitas siap-tampil (mis. "Mengunduh mesin konversi… 12,3 / 140,6 MB"). */
+  status?: string;
   outputs?: ArrayBuffer[];
   outputNames?: string[];
   error?: string;

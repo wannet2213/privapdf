@@ -182,9 +182,14 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
               <button className="ghost-btn" onClick={() => { setResultUrl(null); setResultBlob(null); }} disabled={aiBusy}>Proses ulang</button>
             </>
           ) : (
-            <button className="primary" onClick={runAi} disabled={aiBusy || busy}>
-              {aiBusy ? `${statusText || 'Memproses…'}${elapsed ? ` (${elapsed}s)` : ''}` : 'Hapus latar dengan AI →'}
-            </button>
+            <>
+              <button className="primary" onClick={runAi} disabled={aiBusy || busy}>
+                {aiBusy ? 'Memproses…' : 'Hapus latar dengan AI →'}
+              </button>
+              {aiBusy && (
+                <div className="status" role="status">{statusText || 'Memproses…'}{elapsed ? ` (${elapsed}s)` : ''}</div>
+              )}
+            </>
           )}
         </>
       ) : (
