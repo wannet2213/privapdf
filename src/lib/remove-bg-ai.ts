@@ -4,7 +4,6 @@
  * (remove-bg-imgly.ts).
  */
 
-const WORKER_URL = new URL('../workers/bg-removal.worker.ts', import.meta.url);
 const TIMEOUT_MS = 10 * 60_000;
 
 export type BgModelQuality = 'cepat' | 'imgly-fp16' | 'imgly-quint8';
@@ -16,7 +15,10 @@ export async function removeBackgroundAI(
 ): Promise<Blob> {
   const copy = input.slice(0);
   return new Promise<Blob>((resolve, reject) => {
-    const worker = new Worker(WORKER_URL, { type: 'module' });
+    // new URL() wajib inline di dalam new Worker(): kalau disimpan ke variabel
+    // dulu, Vite memperlakukannya sebagai aset statis — .ts mentah ikut tersalin
+    // ke dist dan worker gagal dimuat di build produksi.
+    const worker = new Worker(new URL('../workers/bg-removal.worker.ts', import.meta.url), { type: 'module' });
     const timer = setTimeout(() => {
       worker.terminate();
       reject(new Error('Pemrosesan melebihi 10 menit — dibatalkan.'));

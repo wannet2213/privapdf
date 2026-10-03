@@ -4,7 +4,6 @@
  * tetap ketat. Aset model self-host di /imgly/ lewat `npm run setup:imgly`.
  */
 
-const WORKER_URL = new URL('../workers/imgly.worker.ts', import.meta.url);
 const TIMEOUT_MS = 10 * 60_000;
 
 export type ImglyModel = 'isnet_fp16' | 'isnet_quint8';
@@ -17,7 +16,8 @@ export async function removeBackgroundImgly(
 ): Promise<Blob> {
   const copy = input.slice(0);
   return new Promise<Blob>((resolve, reject) => {
-    const worker = new Worker(WORKER_URL, { type: 'module' });
+    // new URL() wajib inline di dalam new Worker() — lihat catatan di remove-bg-ai.ts.
+    const worker = new Worker(new URL('../workers/imgly.worker.ts', import.meta.url), { type: 'module' });
     const timer = setTimeout(() => {
       worker.terminate();
       reject(new Error('Pemrosesan melebihi 10 menit — dibatalkan. Coba varian lebih ringan.'));
