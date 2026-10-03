@@ -5,7 +5,10 @@
 // Cloudflare Pages menolak file statis di atas 25 MB (soffice.wasm 147 MB,
 // soffice.data 99 MB). Hapus public/wasm/office sebelum `npm run build`
 // untuk deploy ke host statis.
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { createGzip } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,5 +49,28 @@ if (code.includes(original)) {
   console.log('patch: sudah diterapkan, dilewati.');
 } else {
   console.warn('patch: pola timeout tidak ditemukan — package mungkin berubah, periksa manual.');
+}
+
+// Sediakan salinan .gz untuk nginx `gzip_static` (lihat /etc/nginx/conf.d/privapdf.conf).
+// 237 MB → ~74 MB, dan yang penting: soffice.wasm turun di bawah batas 100 MB
+// Cloudflare sehingga bisa di-cache di edge.
+//
+// Wajib berjalan SETELAH patch di atas — kalau tidak, .gz akan memuat
+// browser.worker.js versi belum-terpatch dan batas 2 menit itu kembali berlaku.
+const gzipTargets = ['soffice.wasm', 'soffice.data', 'soffice.js', 'browser.worker.js', 'soffice.worker.js'];
+for (const name of gzipTargets) {
+  const source = join(dest, name);
+  const target = source + '.gz';
+  if (!existsSync(source)) continue;
+  if (existsSync(target) && statSync(target).mtimeMs >= statSync(source).mtimeMs) {
+    console.log('gzip: sudah terbaru, dilewati —', name);
+    continue;
+  }
+  const size = statSync(source).size;
+  const started = Date.now();
+  await pipeline(createReadStream(source), createGzip({ level: 6 }), createWriteStream(target));
+  const gz = statSync(target).size;
+  const mb = (n) => (n / 1048576).toFixed(1);
+  console.log(`gzip: ${name} ${mb(size)} MB → ${mb(gz)} MB (${((gz / size) * 100).toFixed(1)}%) ${Date.now() - started}ms`);
 }
 console.log('Office WASM siap di public/wasm/office — restart dev server bila sedang berjalan.');

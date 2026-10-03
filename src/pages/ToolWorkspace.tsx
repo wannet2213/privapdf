@@ -21,6 +21,7 @@ import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
 import { RemoveBgPanel } from '../components/RemoveBgPanel';
+import { preloadOfficeConverter } from '../engines/office-native';
 
 const METADATA_FIELDS: Field[] = [
   { name: 'title', label: 'Judul', type: 'text', placeholder: 'Judul dokumen' },
@@ -76,6 +77,9 @@ export function ToolWorkspace() {
     setDropRejected(false);
     const accepted = filterSupportedFiles([...list], tool.accept);
     if (!accepted.length) { setDropRejected(true); setStatus('Format file tidak didukung.'); return; }
+    // Mulai unduh aset LibreOffice WASM (~74 MB setelah gzip) sekarang, berbarengan
+    // dengan pembacaan berkas — bukan menunggu tombol konversi ditekan.
+    if (toolId === 'office-to-pdf') preloadOfficeConverter();
     setPhase(undefined);
     setStatus('Membaca file…');
     try {

@@ -1,5 +1,9 @@
 import type { JobRequest, JobEvent } from './types';
-const JOB_TIMEOUT=120_000;
+// Aset Office 237 MB (soffice.wasm 141 MB + soffice.data 95 MB) diunduh dari
+// origin: pada koneksi lambat unduhannya saja ~2 menit. Batas 2 menit akan
+// memutus pekerjaan yang sebenarnya sedang berjalan. Disamakan dengan batas
+// inisialisasi WASM di browser.worker.js (10 menit, lihat scripts/copy-office-wasm.mjs).
+const JOB_TIMEOUT=600_000;
 export function runJob(request: JobRequest, onEvent: (event: JobEvent) => void) {
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   return new Promise<ArrayBuffer[]>((resolve, reject) => {
