@@ -3,6 +3,7 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPagePr
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
 import { canvasFont, FONT_OPTIONS, getFontDef, type FontDef, type WatermarkPosition, type WatermarkType } from '../engines/pdf-native';
+import { uid } from '../lib/uid';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -285,7 +286,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
       || magic === 0x74727565                   // 'true'
       || magic === 0x74746366;                  // 'ttcf' (collection)
     if (!isOtf && !isTtf) { setFontError('Format tidak didukung. Gunakan file TTF atau OTF.'); return; }
-    const id = `custom-${crypto.randomUUID()}`;
+    const id = `custom-${uid()}`;
     const family = `PrivaDF-${id}`;
     try {
       const face = new FontFace(family, buf);

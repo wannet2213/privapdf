@@ -22,8 +22,11 @@ function post(msg: unknown) {
 
 async function fetchModelWithProgress(onStatus: (m: string) => void): Promise<Uint8Array> {
   const url = `/models/bg/${MODEL_FILE}`;
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(url);
+  // Cache API hanya ada di secure context (https / localhost). Di http://IP:port
+  // 'caches' tidak didefinisikan — model lalu diunduh ulang per sesi worker,
+  // tapi fitur tetap jalan.
+  const cache = typeof caches !== 'undefined' ? await caches.open(CACHE_NAME) : undefined;
+  const cached = await cache?.match(url);
   if (cached) {
     onStatus('Memuat model dari cache…');
     return new Uint8Array(await cached.arrayBuffer());
@@ -55,7 +58,7 @@ async function fetchModelWithProgress(onStatus: (m: string) => void): Promise<Ui
     bytes.set(chunk, offset);
     offset += chunk.length;
   }
-  await cache.put(url, new Response(bytes.slice(), { headers: { 'content-type': 'application/octet-stream' } }));
+  await cache?.put(url, new Response(bytes.slice(), { headers: { 'content-type': 'application/octet-stream' } }));
   return bytes;
 }
 
