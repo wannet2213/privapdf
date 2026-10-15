@@ -1,0 +1,28 @@
+[Unit]
+# Contoh unit systemd untuk menjalankan `npm run serve` (scripts/serve-dist.mjs)
+# sebagai layanan permanen. Salin ke /etc/systemd/system/ lalu sesuaikan:
+#   - WorkingDirectory : path checkout repo di server
+#   - PATH / ExecStart : path npm & node di server (cari dengan `which npm node`)
+#   - PORT / HOST      : port publik layanan; HOST=127.0.0.1 bila diakses lewat
+#                        reverse proxy atau Cloudflare Tunnel di mesin yang sama
+# Setelah `npm run build`, deploy ulang cukup:
+#   sudo systemctl restart privapdf
+# Server menyajikan dist/ langsung dari disk — tidak ada rsync/copy ke web root.
+Description=PrivaPDF - server statis dist/ (scripts/serve-dist.mjs)
+Documentation=https://github.com/wannet2213/privapdf
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/privapdf
+Environment=PATH=/root/.hermes/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PORT=6969
+Environment=HOST=127.0.0.1
+ExecStart=/root/.hermes/node/bin/npm run serve
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

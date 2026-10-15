@@ -28,8 +28,8 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Gambar ke PDF | PNG/JPEG → PDF |
 | Toolkit gambar | Kompres, resize massal, konversi PNG/JPEG/WebP; re-encode menghapus EXIF |
 | Tanda air gambar | Teks atau logo di foto PNG/JPEG/WebP, banyak sekaligus (ZIP); opsi sama dengan tanda air PDF |
-| Hapus latar | AI (U²-Net/ISNet, latar apa pun) atau mode warna solid → PNG transparan |
-| Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (opsional — lihat bawah) |
+| Hapus latar | AI 4 varian — u2netp, ISNet quint8/fp16/fp32, semuanya lokal di browser — atau mode warna solid → PNG transparan |
+| Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (butuh aset engine ±237 MB — lihat Opsional 1) |
 
 Batas per sesi: **50 MB per file, maksimal 10 file, total 120 MB** (termasuk file yang ditambahkan belakangan di Gabungkan PDF). Alat satu-file hanya memakai file pertama bila beberapa file dijatuhkan sekaligus; file berformat lain diabaikan.
 
@@ -46,7 +46,7 @@ npm ci
 npm run dev
 ```
 
-Buka `http://localhost:5173` — hampir semua tool langsung jalan. **Kecuali "Office ke PDF"** (dan sebagian mode AI "Hapus latar"), karena asetnya sengaja tidak ikut repo — aktifkan dengan langkah opsional di bawah.
+Buka `http://localhost:5173` — sebagian besar tool langsung jalan. **Kecuali "Office ke PDF"** dan **varian AI "Hapus latar"**, karena asetnya sengaja tidak ikut repo — aktifkan dengan dua langkah opsional di bawah. Keduanya hanya butuh aset: tidak ada flag, semacam "mode aktif", atau konfigurasi lain — begitu aset ada, toolnya jalan.
 
 ### Opsional 1: Office ke PDF (aset ±237 MB)
 
@@ -66,12 +66,15 @@ Pemakaian pertama di browser: mengunduh ±50 MB (brotli) lalu mengompilasi WASM 
 ### Opsional 2: model AI hapus latar
 
 ```bash
-npm run setup:models   # u2netp (Apache-2.0, ±4 MB) + runtime ONNX → public/models/bg/ (±30 MB)
-npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/imgly/ (±160 MB)
+npm run setup:models   # u2netp (Apache-2.0, ±4 MB) + runtime ONNX → public/models/bg/ (±40 MB)
+npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/imgly/ (±330 MB, 3 varian ISNet)
 ```
 
-- **Seimbang / Ringan (imgly)** — ISNet fp16 ±22 MB / quint8 ±11 MB, default tool.
-- **Cepat** — u2netp ±4 MB.
+- **Maksimal (imgly)** — ISNet fp32 ±168 MB. Paling akurat, unduhan paling berat.
+- **Seimbang (imgly)** — ISNet fp16 ±84 MB. Default tool.
+- **Ringan (imgly)** — ISNet quint8 ±42 MB.
+- **Cepat** — u2netp ±4 MB; tidak memakai imgly, jalur onnxruntime-web sendiri.
+- Runtime ONNX (±11 MB, satu varian saja — `ort-wasm-simd-threaded.wasm`; ±22 MB bila WebGPU yang dipakai) ikut terunduh pada pemakaian AI pertama; setelah itu hanya varian yang dipilih, dan hanya sekali per browser (Cache API).
 - Tanpa langkah ini, tab "Warna solid" pada tool Hapus latar tetap berfungsi.
 
 ## Deploy — pilih salah satu cara
@@ -93,7 +96,15 @@ HOST=127.0.0.1 npm run serve   # hanya lokal
 
 Server kecil tanpa dependensi (`scripts/serve-dist.mjs`) sudah mengurus semuanya: header keamanan + COOP/COEP, SPA fallback (aset yang hilang dijawab 404), MIME WASM, cache (aset ter-hash `immutable`, `index.html` selalu `no-cache`), dan negosiasi `.br` → `.gz` → mentah.
 
-Catatan: server ini **HTTP polos**. Untuk dipakai publik, taruh di balik HTTPS (reverse proxy, Cloudflare Tunnel, dsb.) — selain untuk keamanan, Office ke PDF hanya aktif di konteks aman (HTTPS atau `localhost`). Karena sekarang ada proses yang harus hidup, pasang service manager (`systemd`, `pm2`, dsb.) bila dipakai serius.
+Catatan: server ini **HTTP polos**. Untuk dipakai publik, taruh di balik HTTPS (reverse proxy, Cloudflare Tunnel, dsb.) — selain untuk keamanan, Office ke PDF hanya aktif di konteks aman (HTTPS atau `localhost`).
+
+**Menjalankan permanen dengan systemd.** Contoh unit ada di [`systemd/privapdf.service`](./systemd/privapdf.service). Salin ke `/etc/systemd/system/`, sesuaikan `WorkingDirectory`, `ExecStart`, dan `PORT`, lalu:
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now privapdf
+```
+
+Deploy ulang setelah pull/perubahan cukup `npm run build && sudo systemctl restart privapdf` — server menyajikan `dist/` langsung dari disk, tanpa rsync ke web root. Bila mesin yang sama juga menjalankan reverse proxy atau Cloudflare Tunnel, set `HOST=127.0.0.1` supaya port itu tidak terbuka ke jaringan: proxy/Tunnel tetap bisa menghubungi `http://127.0.0.1:<PORT>`, dan reverse proxy **tidak boleh** menambahkan header keamanan/COOP/COEP sendiri (server asal sudah mengirimnya — header kembar membuat COOP/COEP tidak sah).
 
 ### Cara 2 — nginx atau Caddy di VPS sendiri
 
@@ -231,8 +242,8 @@ new Worker(url, { type: 'module' });
 | Path | Alasan | Cara mendapatkan |
 | --- | --- | --- |
 | `public/wasm/office/` | Aset LibreOffice WASM 237 MB + salinan `.gz`/`.br` — GitHub menolak file > 100 MB | `npm run setup:office` |
-| `public/models/bg/` | Model u2netp + runtime ONNX ±30 MB | `npm run setup:models` |
-| `public/imgly/` | Aset @imgly/background-removal ±160 MB | `npm run setup:imgly` |
+| `public/models/bg/` | Model u2netp + runtime ONNX ±40 MB | `npm run setup:models` |
+| `public/imgly/` | Aset @imgly/background-removal ±330 MB (3 varian ISNet) | `npm run setup:imgly` |
 | `dist/` | Hasil build | `npm run build` |
 
 ## Privasi dan keamanan

@@ -4,17 +4,15 @@
 //
 //   npm run setup:imgly
 //
-// Folder public/imgly/ di-gitignored. Idempoten: chunk yang sudah ada
-// dilewati. Hanya varian yang dipakai panel (fp16 ±22 MB, quint8 ±11 MB
-// + runtime ONNX) — model fp32 /models/isnet (±170 MB) sengaja dilewati
-// karena jalur "Maksimal" sudah dilayani ISNet Apache-2.0 milik sendiri.
+// Folder public/imgly/ di-gitignored. Idempoten: chunk yang sudah ada dilewati.
+// Semua varian yang dipakai panel diunduh — quint8 ±42 MB, fp16 ±84 MB, dan
+// fp32 /models/isnet ±168 MB ("Maksimal") — plus runtime ONNX ±33 MB. Ukuran
+// itu nyata (dihitung dari resources.json), bukan perkiraan.
 import { createWriteStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-
-const SKIP = ['/models/isnet'];
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dest = join(root, 'public', 'imgly');
@@ -41,10 +39,6 @@ let total = 0;
 let skipped = 0;
 const pending = [];
 for (const [key, entry] of Object.entries(manifest)) {
-  if (SKIP.includes(key)) {
-    console.log(`dilewati: ${key} (tidak dipakai panel)`);
-    continue;
-  }
   console.log(`resource ${key}: ${(entry.size / 1048576).toFixed(1)} MB (${entry.chunks.length} chunk)`);
   total += entry.size;
   for (const chunk of entry.chunks) {

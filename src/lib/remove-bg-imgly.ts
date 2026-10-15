@@ -6,7 +6,7 @@
 
 const TIMEOUT_MS = 10 * 60_000;
 
-export type ImglyModel = 'isnet_fp16' | 'isnet_quint8';
+export type ImglyModel = 'isnet' | 'isnet_fp16' | 'isnet_quint8';
 
 /** Hapus latar dengan imgly ISNet. Buffer input tidak diubah (disalin internal). */
 export async function removeBackgroundImgly(
