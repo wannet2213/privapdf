@@ -1,10 +1,10 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 21 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, hapus latar, Office ke PDF.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 22 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
 
 Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
 
-## Daftar Tool (21)
+## Daftar Tool (22)
 
 | Tool | Fungsi |
 | --- | --- |
@@ -188,7 +188,7 @@ Hasilnya semua tool jalan **kecuali Office ke PDF**. Memunculkannya kembali butu
 
 | Fitur | Syarat |
 | --- | --- |
-| 19 tool PDF/gambar | Hosting statis biasa — tanpa syarat khusus |
+| 20 tool PDF/gambar | Hosting statis biasa — tanpa syarat khusus |
 | Hapus latar (AI) | Aset model ter-host; Cache API butuh konteks aman (tanpa itu model terunduh ulang tiap sesi, tetap jalan) |
 | Office ke PDF | Aset WASM ter-host + **konteks aman (HTTPS/localhost) + header COOP/COEP** + browser modern (Chrome/Edge/Firefox terbaru). Webview/pratinjau tersemat tidak didukung — aplikasi menolak dengan pesan jelas, bukan menggantung |
 
