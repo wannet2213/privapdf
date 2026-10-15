@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
-import { canvasFont, FONT_OPTIONS, getFontDef, type FontDef, type WatermarkPosition, type WatermarkType } from '../engines/pdf-native';
+import { canvasFont, FONT_OPTIONS, getFontDef, watermarkCenters, type FontDef, type WatermarkPosition, type WatermarkType } from '../engines/pdf-native';
 import { uid } from '../lib/uid';
+import { convertImage, FORMAT_EXT, withFormatExt, type ImageFormat } from '../lib/image-toolkit';
+import type { SessionFile } from '../lib/file-session';
+import type { ImageOutput } from './ImageToolkitPanel';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -13,11 +16,18 @@ type Format = 'number' | 'page-of' | 'roman';
 interface AnnotatePanelProps {
   bytes: ArrayBuffer;
   mode: 'page-numbers' | 'watermark';
-  onProcess: (opts: Record<string, unknown>) => void;
+  onProcess?: (opts: Record<string, unknown>) => void;
   busy: boolean;
+  /** Mode foto: tanda air digambar langsung ke gambar-gambar ini; `bytes` = gambar pertama untuk pratinjau. */
+  images?: SessionFile[];
+  onImages?: (items: ImageOutput[]) => void;
 }
 
 const PREVIEW_SCALE = 1.0;
+/** Satuan jarak ubin untuk gambar (pt per 1× slider); teks memakai ukuran font. */
+const IMAGE_GAP_UNIT = 20;
+/** Mode foto: sisi terpanjang dipetakan ke 842 unit (setara A4) agar ukuran font/geser terasa sama seperti di PDF. */
+const PHOTO_LONG_SIDE = 842;
 
 function toRoman(num: number): string {
   const map: [number, string][] = [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']];
@@ -26,7 +36,10 @@ function toRoman(num: number): string {
   return result;
 }
 
-export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelProps) {
+export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }: AnnotatePanelProps) {
+  const isPhoto = !!images;
+  const [rendering, setRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string>();
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const docRef = useRef<PDFDocumentProxy | undefined>(undefined);
@@ -46,6 +59,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
   const [pnFont, setPnFont] = useState('helvetica');
 
   // Watermark options
+  const [wmContent, setWmContent] = useState<'text' | 'image'>('text');
   const [wmType, setWmType] = useState<WatermarkType>('center');
   const [wmText, setWmText] = useState('RAHASIA');
   const [wmFontSize, setWmFontSize] = useState(50);
@@ -71,6 +85,21 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    if (isPhoto) {
+      createImageBitmap(new Blob([bytes])).then((bmp) => {
+        const canvas = baseCanvasRef.current;
+        if (cancelled || !canvas) { bmp.close(); return; }
+        const k = PHOTO_LONG_SIDE / Math.max(bmp.width, bmp.height);
+        canvas.width = Math.round(bmp.width * k);
+        canvas.height = Math.round(bmp.height * k);
+        canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        bmp.close();
+        setPageSize({ width: canvas.width, height: canvas.height });
+        setTotalPages(1);
+        setLoading(false);
+      }).catch(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
     getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise.then(async (doc) => {
       if (cancelled) { void doc.destroy(); return; }
       docRef.current = doc;
@@ -97,7 +126,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
       taskRef.current?.cancel();
       docRef.current?.destroy();
     };
-  }, [bytes]);
+  }, [bytes, isPhoto]);
 
   // FontDef aktif untuk watermark — bisa font bawaan atau hasil unggahan user
   const activeWmFontDef = useMemo<FontDef>(() => {
@@ -117,8 +146,6 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
 
   // Overlay drawing function — works at any scale
   const drawOverlay = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number, scale: number) => {
-    ctx.clearRect(0, 0, w, h);
-
     if (mode === 'page-numbers') {
       const fontSize = pnFontSize * scale;
       const margin = 28 * scale;
@@ -143,12 +170,24 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
       return;
     }
 
-    // Watermark modes
-    if (wmType === 'image' && wmImage) {
+    const margin = 40 * scale;
+    const offX = wmOffsetX * scale;
+    const offY = wmOffsetY * scale;
+    const rad = (-wmRotation * Math.PI) / 180;
+
+    if (wmContent === 'image') {
+      if (!wmImage) return;
       const imgW = w * (wmImageScale / 100);
       const imgH = (wmImage.element.height / wmImage.element.width) * imgW;
+      const gap = wmTileGap * IMAGE_GAP_UNIT * scale;
       ctx.globalAlpha = wmOpacity / 100;
-      ctx.drawImage(wmImage.element, (w - imgW) / 2, (h - imgH) / 2, imgW, imgH);
+      for (const c of watermarkCenters(wmType, wmPosition, w, h, { w: imgW, h: imgH, stepX: imgW + gap, stepY: imgH + gap }, margin, offX, offY)) {
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        if (c.rotate) ctx.rotate(rad);
+        ctx.drawImage(wmImage.element, -imgW / 2, -imgH / 2, imgW, imgH);
+        ctx.restore();
+      }
       ctx.globalAlpha = 1;
       return;
     }
@@ -159,8 +198,6 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
     const fontSize = wmFontSize * scale;
     const spacing = wmLetterSpacing * scale;
     const lineH = wmLineHeight * fontSize;
-    const offX = wmOffsetX * scale;
-    const offY = wmOffsetY * scale;
     ctx.font = canvasFont(activeWmFontDef, fontSize);
     ctx.fillStyle = wmColor;
     ctx.globalAlpha = wmOpacity / 100;
@@ -200,39 +237,19 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
     const drawBlock = (cx: number, cy: number, rotate: boolean) => {
       ctx.save();
       ctx.translate(cx, cy);
-      if (rotate) ctx.rotate((-wmRotation * Math.PI) / 180);
+      if (rotate) ctx.rotate(rad);
       ctx.textBaseline = 'middle';
       lines.forEach((line, li) => drawLine(line, 0, (li - (lines.length - 1) / 2) * lineH));
       ctx.restore();
     };
 
-    if (wmType === 'tiled') {
-      // Jarak antar ubin sebagai pengali ukuran font (diskalakan bersama preview)
-      const gap = wmTileGap * fontSize;
-      const stepX = widest + gap;
-      const stepY = blockH + fontSize + gap;
-      for (let y = stepY / 2; y < h + stepY; y += stepY) {
-        for (let x = -stepX; x < w + stepX; x += stepX) {
-          const rowOffset = (Math.floor(y / stepY) % 2) * (stepX / 2);
-          drawBlock(x + rowOffset + widest / 2 + offX, y + offY, true);
-        }
-      }
-    } else if (wmType === 'positioned') {
-      const margin = 40 * scale;
-      let bx: number, by: number;
-      switch (wmPosition) {
-        case 'top-left': bx = margin + widest / 2; by = margin + blockH / 2; break;
-        case 'top-right': bx = w - margin - widest / 2; by = margin + blockH / 2; break;
-        case 'bottom-left': bx = margin + widest / 2; by = h - margin - blockH / 2; break;
-        case 'bottom-right': bx = w - margin - widest / 2; by = h - margin - blockH / 2; break;
-        default: bx = w / 2; by = h / 2;
-      }
-      drawBlock(bx + offX, by + offY, wmPosition === 'center');
-    } else {
-      drawBlock(w / 2 + offX, h / 2 + offY, true);
+    // Jarak antar ubin sebagai pengali ukuran font (diskalakan bersama preview)
+    const gap = wmTileGap * fontSize;
+    for (const c of watermarkCenters(wmType, wmPosition, w, h, { w: widest, h: blockH, stepX: widest + gap, stepY: blockH + fontSize + gap }, margin, offX, offY)) {
+      drawBlock(c.x, c.y, c.rotate);
     }
     ctx.globalAlpha = 1;
-  }, [mode, totalPages, position, format, startFrom, pnFontSize, pnColor, pnFont, wmType, wmText, wmFontSize, wmOpacity, wmRotation, wmColor, wmFont, wmPosition, wmImage, wmImageScale, wmLetterSpacing, wmLineHeight, wmOffsetX, wmOffsetY, wmTileGap, activeWmFontDef]);
+  }, [mode, totalPages, position, format, startFrom, pnFontSize, pnColor, pnFont, wmContent, wmType, wmText, wmFontSize, wmOpacity, wmRotation, wmColor, wmFont, wmPosition, wmImage, wmImageScale, wmLetterSpacing, wmLineHeight, wmOffsetX, wmOffsetY, wmTileGap, activeWmFontDef]);
 
   // Preload custom font untuk canvas (document.fonts.load), lalu re-render overlay
   const [fontReady, setFontReady] = useState(0);
@@ -300,33 +317,49 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
     setWmFont(id);
   };
 
+  // Mode foto: gambar ulang tiap foto di resolusi asli + tanda air, format tetap sama seperti aslinya
+  const submitPhotos = async (list: SessionFile[]) => {
+    setRendering(true);
+    setRenderError(undefined);
+    try {
+      const out: ImageOutput[] = [];
+      for (const f of list) {
+        const format = (f.type in FORMAT_EXT ? f.type : 'image/png') as ImageFormat;
+        const r = await convertImage(f.bytes, { format, quality: 0.92, maxWidth: 0 }, (ctx, w, h) => drawOverlay(ctx, w, h, Math.max(w, h) / PHOTO_LONG_SIDE));
+        out.push({ blob: r.blob, name: withFormatExt(f.name, r.actualFormat).replace(/(\.[^.]+)$/, '-tanda-air$1') });
+      }
+      onImages?.(out);
+    } catch (e) {
+      setRenderError(e instanceof Error ? e.message : 'Gagal memproses gambar.');
+    }
+    setRendering(false);
+  };
+
   const submit = () => {
+    if (images) { void submitPhotos(images); return; }
     if (mode === 'page-numbers') {
-      onProcess({ position, format, startFrom, fontSize: pnFontSize, margin: 28, color: pnColor, font: pnFont });
+      onProcess?.({ position, format, startFrom, fontSize: pnFontSize, margin: 28, color: pnColor, font: pnFont });
     } else {
       const custom = customFonts.find((f) => f.id === wmFont);
       const opts: Record<string, unknown> = {
         type: wmType,
-        text: wmText,
-        fontSize: wmFontSize,
         opacity: wmOpacity / 100,
         rotation: wmRotation,
-        color: wmColor,
-        font: wmFont,
-        letterSpacing: wmLetterSpacing,
-        lineHeight: wmLineHeight,
         offsetX: wmOffsetX,
         offsetY: wmOffsetY,
       };
       if (wmType === 'positioned') opts.position = wmPosition;
-      if (wmType === 'tiled') opts.tileGap = wmTileGap * wmFontSize; // engine pakai pt absolut
-      if (custom) opts.customFontBytes = custom.bytes;
-      if (wmType === 'image' && wmImage) {
+      if (wmContent === 'image' && wmImage) {
         opts.imageBytes = wmImage.bytes;
         opts.imageType = wmImage.type;
         opts.imageScale = wmImageScale / 100;
+        if (wmType === 'tiled') opts.tileGap = wmTileGap * IMAGE_GAP_UNIT;
+      } else {
+        Object.assign(opts, { text: wmText, fontSize: wmFontSize, color: wmColor, font: wmFont, letterSpacing: wmLetterSpacing, lineHeight: wmLineHeight });
+        if (wmType === 'tiled') opts.tileGap = wmTileGap * wmFontSize; // engine pakai pt absolut
+        if (custom) opts.customFontBytes = custom.bytes;
       }
-      onProcess(opts);
+      onProcess?.(opts);
     }
   };
 
@@ -337,10 +370,14 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
           <div className="annotate-canvas-stack">
             <canvas ref={baseCanvasRef} className="annotate-canvas-base" />
             <canvas ref={overlayCanvasRef} className="annotate-canvas-overlay" />
-            {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(0)} aria-label="Lihat halaman full">⤢</button>}
-            {loading && <div className="annotate-loading">Memuat halaman…</div>}
+            {!loading && !isPhoto && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(0)} aria-label="Lihat halaman full">⤢</button>}
+            {loading && <div className="annotate-loading">{isPhoto ? 'Memuat gambar…' : 'Memuat halaman…'}</div>}
           </div>
-          <p className="annotate-caption">Pratinjau langsung, halaman 1 dari {totalPages}</p>
+          <p className="annotate-caption">
+            {images
+              ? `Pratinjau langsung, ${images[0].name}${images.length > 1 ? ` (diterapkan ke ${images.length} gambar)` : ''}`
+              : `Pratinjau langsung, halaman 1 dari ${totalPages}`}
+          </p>
         </div>
 
         <div className="tool-form annotate-form">
@@ -390,19 +427,25 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
           ) : (
             <>
               <div className="tool-form-field">
-                <label className="tool-form-label">Jenis tanda air</label>
+                <label className="tool-form-label">Isi tanda air</label>
+                <div className="wm-type-tabs">
+                  <button type="button" className={`wm-type-tab ${wmContent === 'text' ? 'is-active' : ''}`} onClick={() => setWmContent('text')}>Teks</button>
+                  <button type="button" className={`wm-type-tab ${wmContent === 'image' ? 'is-active' : ''}`} onClick={() => setWmContent('image')}>Gambar</button>
+                </div>
+              </div>
+              <div className="tool-form-field">
+                <label className="tool-form-label">Tata letak</label>
                 <div className="wm-type-tabs">
                   <button type="button" className={`wm-type-tab ${wmType === 'center' ? 'is-active' : ''}`} onClick={() => setWmType('center')}>Tengah</button>
                   <button type="button" className={`wm-type-tab ${wmType === 'tiled' ? 'is-active' : ''}`} onClick={() => setWmType('tiled')}>Berubin</button>
                   <button type="button" className={`wm-type-tab ${wmType === 'positioned' ? 'is-active' : ''}`} onClick={() => setWmType('positioned')}>Posisi</button>
-                  <button type="button" className={`wm-type-tab ${wmType === 'image' ? 'is-active' : ''}`} onClick={() => setWmType('image')}>Gambar</button>
                 </div>
               </div>
 
-              {wmType === 'image' ? (
+              {wmContent === 'image' ? (
                 <>
                   <div className="tool-form-field">
-                    <label className="tool-form-label" htmlFor="wm-img">Unggah gambar</label>
+                    <label className="tool-form-label" htmlFor="wm-img">Unggah gambar (PNG/JPG)</label>
                     <input id="wm-img" type="file" accept="image/png,image/jpeg" className="tool-form-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImageUpload(f); }} />
                   </div>
                   {wmImage && (
@@ -414,68 +457,64 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
                       <input id="wm-img-scale" type="range" min={10} max={80} value={wmImageScale} onChange={(e) => setWmImageScale(Number(e.target.value))} />
                     </div>
                   )}
-                  <div className="tool-form-field">
-                    <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-img-op">Opasitas</label>
-                      <span className="tool-form-range-value">{wmOpacity}%</span>
-                    </div>
-                    <input id="wm-img-op" type="range" min={5} max={80} value={wmOpacity} onChange={(e) => setWmOpacity(Number(e.target.value))} />
-                  </div>
                 </>
               ) : (
+                <div className="tool-form-field">
+                  <label className="tool-form-label" htmlFor="wm-text">Teks tanda air</label>
+                  <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder="Contoh: RAHASIA (tekan Enter untuk baris baru)" onChange={(e) => setWmText(e.target.value)} />
+                  <small className="wm-text-meta">{wmText.split('\n').length} baris. Tekan Enter di kolom teks untuk menambah baris</small>
+                </div>
+              )}
+
+              {wmType === 'positioned' && (
+                <div className="tool-form-field">
+                  <label className="tool-form-label" htmlFor="wm-pos">Posisi</label>
+                  <select id="wm-pos" className="tool-form-input" value={wmPosition} onChange={(e) => setWmPosition(e.target.value as WatermarkPosition)}>
+                    <option value="center">Tengah</option>
+                    <option value="top-left">Kiri Atas</option>
+                    <option value="top-right">Kanan Atas</option>
+                    <option value="bottom-left">Kiri Bawah</option>
+                    <option value="bottom-right">Kanan Bawah</option>
+                  </select>
+                </div>
+              )}
+              {wmContent === 'text' && (
+                <div className="tool-form-field">
+                  <div className="tool-form-range-row">
+                    <label className="tool-form-label" htmlFor="wm-size">Ukuran font</label>
+                    <span className="tool-form-range-value">{wmFontSize}</span>
+                  </div>
+                  <input id="wm-size" type="range" min={12} max={120} value={wmFontSize} onChange={(e) => setWmFontSize(Number(e.target.value))} />
+                </div>
+              )}
+              <div className="tool-form-field">
+                <div className="tool-form-range-row">
+                  <label className="tool-form-label" htmlFor="wm-op">Opasitas</label>
+                  <span className="tool-form-range-value">{wmOpacity}%</span>
+                </div>
+                <input id="wm-op" type="range" min={5} max={80} value={wmOpacity} onChange={(e) => setWmOpacity(Number(e.target.value))} />
+              </div>
+              {wmType !== 'positioned' && (
+                <div className="tool-form-field">
+                  <div className="tool-form-range-row">
+                    <label className="tool-form-label" htmlFor="wm-rot">Rotasi</label>
+                    <span className="tool-form-range-value">{wmRotation}°</span>
+                  </div>
+                  <input id="wm-rot" type="range" min={0} max={90} value={wmRotation} onChange={(e) => setWmRotation(Number(e.target.value))} />
+                </div>
+              )}
+              {wmType === 'tiled' && (
+                <div className="tool-form-field">
+                  <div className="tool-form-range-row">
+                    <label className="tool-form-label" htmlFor="wm-tilegap">Jarak antar ubin</label>
+                    <span className="tool-form-range-value">{wmContent === 'image' ? `${Math.round(wmTileGap * IMAGE_GAP_UNIT)} pt` : `${wmTileGap.toFixed(1)}×`}</span>
+                  </div>
+                  <input id="wm-tilegap" type="range" min={0.5} max={6} step={0.1} value={wmTileGap} onChange={(e) => setWmTileGap(Number(e.target.value))} />
+                  <small className="wm-field-hint">{wmContent === 'image' ? 'Kecil = rapat, besar = renggang' : 'Pengali ukuran font: kecil = rapat, besar = renggang'}</small>
+                </div>
+              )}
+              {wmContent === 'text' && (
                 <>
-                  <div className="tool-form-field">
-                    <label className="tool-form-label" htmlFor="wm-text">Teks tanda air</label>
-                    <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder="Contoh: RAHASIA (tekan Enter untuk baris baru)" onChange={(e) => setWmText(e.target.value)} />
-                    <small className="wm-text-meta">{wmText.split('\n').length} baris. Tekan Enter di kolom teks untuk menambah baris</small>
-                  </div>
-
-                  {wmType === 'positioned' && (
-                    <div className="tool-form-field">
-                      <label className="tool-form-label" htmlFor="wm-pos">Posisi</label>
-                      <select id="wm-pos" className="tool-form-input" value={wmPosition} onChange={(e) => setWmPosition(e.target.value as WatermarkPosition)}>
-                        <option value="center">Tengah</option>
-                        <option value="top-left">Kiri Atas</option>
-                        <option value="top-right">Kanan Atas</option>
-                        <option value="bottom-left">Kiri Bawah</option>
-                        <option value="bottom-right">Kanan Bawah</option>
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="tool-form-field">
-                    <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-size">Ukuran font</label>
-                      <span className="tool-form-range-value">{wmFontSize}</span>
-                    </div>
-                    <input id="wm-size" type="range" min={12} max={120} value={wmFontSize} onChange={(e) => setWmFontSize(Number(e.target.value))} />
-                  </div>
-                  <div className="tool-form-field">
-                    <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-op">Opasitas</label>
-                      <span className="tool-form-range-value">{wmOpacity}%</span>
-                    </div>
-                    <input id="wm-op" type="range" min={5} max={80} value={wmOpacity} onChange={(e) => setWmOpacity(Number(e.target.value))} />
-                  </div>
-                  {wmType !== 'positioned' && (
-                    <div className="tool-form-field">
-                      <div className="tool-form-range-row">
-                        <label className="tool-form-label" htmlFor="wm-rot">Rotasi</label>
-                        <span className="tool-form-range-value">{wmRotation}°</span>
-                      </div>
-                      <input id="wm-rot" type="range" min={0} max={90} value={wmRotation} onChange={(e) => setWmRotation(Number(e.target.value))} />
-                    </div>
-                  )}
-                  {wmType === 'tiled' && (
-                    <div className="tool-form-field">
-                      <div className="tool-form-range-row">
-                        <label className="tool-form-label" htmlFor="wm-tilegap">Jarak antar ubin</label>
-                        <span className="tool-form-range-value">{wmTileGap.toFixed(1)}×</span>
-                      </div>
-                      <input id="wm-tilegap" type="range" min={0.5} max={6} step={0.1} value={wmTileGap} onChange={(e) => setWmTileGap(Number(e.target.value))} />
-                      <small className="wm-field-hint">Pengali ukuran font: kecil = rapat, besar = renggang</small>
-                    </div>
-                  )}
                   <div className="tool-form-field">
                     <div className="tool-form-range-row">
                       <label className="tool-form-label" htmlFor="wm-spacing">Spasi huruf</label>
@@ -502,20 +541,24 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
                       <small className="wm-field-hint">Berlaku untuk teks multi-baris, tambahkan baris kedua dulu</small>
                     )}
                   </div>
-                  <div className="tool-form-field">
-                    <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-offx">Geser horizontal</label>
-                      <span className="tool-form-range-value">{wmOffsetX > 0 ? `+${wmOffsetX}` : wmOffsetX}</span>
-                    </div>
-                    <input id="wm-offx" type="range" min={-300} max={300} step={5} value={wmOffsetX} onChange={(e) => setWmOffsetX(Number(e.target.value))} />
-                  </div>
-                  <div className="tool-form-field">
-                    <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-offy">Geser vertikal</label>
-                      <span className="tool-form-range-value">{wmOffsetY > 0 ? `+${wmOffsetY}` : wmOffsetY}</span>
-                    </div>
-                    <input id="wm-offy" type="range" min={-300} max={300} step={5} value={wmOffsetY} onChange={(e) => setWmOffsetY(Number(e.target.value))} />
-                  </div>
+                </>
+              )}
+              <div className="tool-form-field">
+                <div className="tool-form-range-row">
+                  <label className="tool-form-label" htmlFor="wm-offx">Geser horizontal</label>
+                  <span className="tool-form-range-value">{wmOffsetX > 0 ? `+${wmOffsetX}` : wmOffsetX}</span>
+                </div>
+                <input id="wm-offx" type="range" min={-300} max={300} step={5} value={wmOffsetX} onChange={(e) => setWmOffsetX(Number(e.target.value))} />
+              </div>
+              <div className="tool-form-field">
+                <div className="tool-form-range-row">
+                  <label className="tool-form-label" htmlFor="wm-offy">Geser vertikal</label>
+                  <span className="tool-form-range-value">{wmOffsetY > 0 ? `+${wmOffsetY}` : wmOffsetY}</span>
+                </div>
+                <input id="wm-offy" type="range" min={-300} max={300} step={5} value={wmOffsetY} onChange={(e) => setWmOffsetY(Number(e.target.value))} />
+              </div>
+              {wmContent === 'text' && (
+                <>
                   <div className="tool-form-field">
                     <label className="tool-form-label" htmlFor="wm-color">Warna</label>
                     <input id="wm-color" type="color" className="annotate-color-input" value={wmColor} onChange={(e) => setWmColor(e.target.value)} />
@@ -544,9 +587,10 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy }: AnnotatePanelPro
           )}
         </div>
       </div>
-      <button className="primary" onClick={submit} disabled={busy || (mode === 'watermark' && wmType === 'image' && !wmImage)}>
-        {busy ? 'Memproses…' : mode === 'page-numbers' ? 'Terapkan ke semua halaman' : 'Tambah tanda air'}
+      <button className="primary" onClick={submit} disabled={busy || rendering || (mode === 'watermark' && wmContent === 'image' && !wmImage)}>
+        {busy || rendering ? 'Memproses…' : mode === 'page-numbers' ? 'Terapkan ke semua halaman' : images && images.length > 1 ? `Tambah tanda air ke ${images.length} gambar` : 'Tambah tanda air'}
       </button>
+      {renderError && <p className="wm-font-error" role="alert">{renderError}</p>}
       {viewing !== null && (
         <PageViewer bytes={bytes} pageNumber={viewing} totalPages={totalPages} onClose={() => setViewing(null)} onPageChange={setViewing} overlayDraw={viewerOverlay} />
       )}

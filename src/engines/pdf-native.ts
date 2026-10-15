@@ -291,13 +291,13 @@ export async function addPageNumbers(input: ArrayBuffer, opts: PageNumberOptions
   return (await doc.save()).buffer as ArrayBuffer;
 }
 
-/** Jenis tanda air. */
-export type WatermarkType = 'center' | 'tiled' | 'positioned' | 'image';
+/** Tata letak tanda air. Isi (teks/gambar) ditentukan oleh ada-tidaknya `imageBytes`. */
+export type WatermarkType = 'center' | 'tiled' | 'positioned';
 export type WatermarkPosition = 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 /** Opsi tanda air. */
 export interface WatermarkOptions {
-  text: string;
+  text?: string;
   fontSize?: number;
   opacity?: number;
   rotation?: number;
@@ -305,20 +305,51 @@ export interface WatermarkOptions {
   font?: string;
   type?: WatermarkType;
   position?: WatermarkPosition;
+  /** Jarak antar ubin (pt). */
   tileGap?: number;
+  /** Bila ada, tanda air berupa gambar (teks diabaikan). */
   imageBytes?: ArrayBuffer;
   imageType?: 'png' | 'jpg';
+  /** Lebar gambar sebagai fraksi lebar halaman. */
   imageScale?: number;
   /** Jarak antar karakter (pt). 0 = normal. */
   letterSpacing?: number;
   /** Pengali tinggi baris terhadap ukuran font (multi-baris, teks dipisah \n). Default 1.2. */
   lineHeight?: number;
-  /** Geser horizontal dari posisi terhitung (pt). */
+  /** Geser horizontal dari posisi terhitung (pt, + = kanan). */
   offsetX?: number;
-  /** Geser vertikal dari posisi terhitung (pt). */
+  /** Geser vertikal dari posisi terhitung (pt, + = bawah, sama seperti preview). */
   offsetY?: number;
   /** Bytes font TTF/OTF yang diunggah user — menimpa pilihan `font`. */
   customFontBytes?: ArrayBuffer;
+}
+
+export interface WatermarkBox { w: number; h: number; stepX: number; stepY: number }
+
+/**
+ * Pusat setiap salinan tanda air dalam koordinat atas-ke-bawah (seperti canvas).
+ * Dipakai bersama oleh engine (y dibalik) dan preview agar hasil sama persis.
+ * `rotate` false untuk posisi pojok.
+ */
+export function watermarkCenters(
+  type: WatermarkType, position: WatermarkPosition, pw: number, ph: number,
+  box: WatermarkBox, margin: number, offX = 0, offY = 0,
+): { x: number; y: number; rotate: boolean }[] {
+  const out: { x: number; y: number; rotate: boolean }[] = [];
+  const put = (x: number, y: number, rotate: boolean) => out.push({ x: x + offX, y: y + offY, rotate });
+  if (type === 'tiled') {
+    for (let y = box.stepY / 2; y < ph + box.stepY; y += box.stepY) {
+      const rowOffset = (Math.floor(y / box.stepY) % 2) * (box.stepX / 2);
+      for (let x = -box.stepX; x < pw + box.stepX; x += box.stepX) put(x + rowOffset + box.w / 2, y, true);
+    }
+  } else if (type === 'positioned' && position !== 'center') {
+    const x = position.endsWith('left') ? margin + box.w / 2 : pw - margin - box.w / 2;
+    const y = position.startsWith('top') ? margin + box.h / 2 : ph - margin - box.h / 2;
+    put(x, y, false);
+  } else {
+    put(pw / 2, ph / 2, true);
+  }
+  return out;
 }
 
 /** Lebar satu baris teks termasuk letter spacing (spasi tidak ditambahkan di akhir). */
@@ -383,34 +414,42 @@ export async function addWatermark(input: ArrayBuffer, opts: WatermarkOptions): 
   const rotation = opts.rotation ?? 45;
   const c = hexToRgb(opts.color ?? '#808080');
   const type = opts.type ?? 'center';
+  const position = opts.position ?? 'center';
+  const offX = opts.offsetX ?? 0;
+  const offY = opts.offsetY ?? 0;
+  const margin = 40;
 
-  // Image watermark
-  if (type === 'image' && opts.imageBytes) {
-    const imageType = opts.imageType ?? 'png';
-    const image = imageType === 'png' ? await doc.embedPng(opts.imageBytes) : await doc.embedJpg(opts.imageBytes);
+  if (opts.imageBytes) {
+    const image = opts.imageType === 'jpg' ? await doc.embedJpg(opts.imageBytes) : await doc.embedPng(opts.imageBytes);
     const imageScale = opts.imageScale ?? 0.3;
     pages.forEach((page) => {
       const { width, height } = page.getSize();
       const w = width * imageScale;
       const h = (image.height / image.width) * w;
-      page.drawImage(image, {
-        x: (width - w) / 2,
-        y: (height - h) / 2,
-        width: w,
-        height: h,
-        opacity,
-      });
+      const gap = opts.tileGap ?? w / 2;
+      for (const p of watermarkCenters(type, position, width, height, { w, h, stepX: w + gap, stepY: h + gap }, margin, offX, offY)) {
+        // pdf-lib memutar gambar di pojok kiri-bawah; geser titik awal agar putaran mengelilingi pusat
+        const rot = p.rotate ? rotation : 0;
+        const rad = (rot * Math.PI) / 180;
+        const cy = height - p.y;
+        page.drawImage(image, {
+          x: p.x - (w / 2) * Math.cos(rad) + (h / 2) * Math.sin(rad),
+          y: cy - (w / 2) * Math.sin(rad) - (h / 2) * Math.cos(rad),
+          width: w,
+          height: h,
+          opacity,
+          rotate: degrees(rot),
+        });
+      }
     });
     return (await doc.save()).buffer as ArrayBuffer;
   }
 
-  // Text-based watermark
-  if (!opts.text?.trim()) throw new Error('Teks tanda air tidak boleh kosong.');
+  const text = opts.text ?? '';
+  if (!text.trim()) throw new Error('Teks tanda air tidak boleh kosong.');
   // Spasi huruf bisa negatif (merapatkan); dibatasi agar karakter tidak bertumpuk terbalik
   const spacing = Math.max(-(opts.fontSize ?? 50) * 0.5, opts.letterSpacing ?? 0);
   const lineHeight = opts.lineHeight ?? 1.2;
-  const offX = opts.offsetX ?? 0;
-  const offY = opts.offsetY ?? 0;
 
   let font: PDFFont;
   if (opts.customFontBytes) {
@@ -430,39 +469,17 @@ export async function addWatermark(input: ArrayBuffer, opts: WatermarkOptions): 
   }
 
   const size = opts.fontSize ?? 50;
-  const position = opts.position ?? 'center';
   const tileGap = opts.tileGap ?? size * 2.5;
   const drawOpts: DrawBlockOpts = { font, size, color: rgb(c.r, c.g, c.b), opacity, rotation, spacing, lineHeight };
+  const lines = text.split('\n');
+  const widest = Math.max(...lines.map((l) => spacedLineWidth(font, l, size, spacing)));
+  const blockH = (lines.length - 1) * lineHeight * size;
+  const box = { w: widest, h: blockH, stepX: widest + tileGap, stepY: blockH + size + tileGap };
 
   pages.forEach((page) => {
     const { width, height } = page.getSize();
-    const lines = opts.text.split('\n');
-    const widest = Math.max(...lines.map((l) => spacedLineWidth(font, l, size, spacing)));
-    const blockH = (lines.length - 1) * lineHeight * size;
-
-    if (type === 'tiled') {
-      const stepX = widest + tileGap;
-      const stepY = blockH + size + tileGap;
-      for (let y = stepY / 2; y < height + stepY; y += stepY) {
-        for (let x = -stepX; x < width + stepX; x += stepX) {
-          const rowOffset = (Math.floor(y / stepY) % 2) * (stepX / 2);
-          drawTextBlockCentered(page, opts.text, x + rowOffset + widest / 2 + offX, y + offY, drawOpts);
-        }
-      }
-    } else if (type === 'positioned') {
-      const margin = 40;
-      let bx: number, by: number; // pusat blok
-      switch (position) {
-        case 'top-left': bx = margin + widest / 2; by = height - margin - blockH / 2; break;
-        case 'top-right': bx = width - margin - widest / 2; by = height - margin - blockH / 2; break;
-        case 'bottom-left': bx = margin + widest / 2; by = margin + blockH / 2; break;
-        case 'bottom-right': bx = width - margin - widest / 2; by = margin + blockH / 2; break;
-        default: bx = width / 2; by = height / 2;
-      }
-      drawTextBlockCentered(page, opts.text, bx + offX, by + offY, { ...drawOpts, rotation: position === 'center' ? rotation : 0 });
-    } else {
-      // center (default) — berotasi mengelilingi pusat halaman, sama seperti preview
-      drawTextBlockCentered(page, opts.text, width / 2 + offX, height / 2 + offY, drawOpts);
+    for (const p of watermarkCenters(type, position, width, height, box, margin, offX, offY)) {
+      drawTextBlockCentered(page, text, p.x, height - p.y, p.rotate ? drawOpts : { ...drawOpts, rotation: 0 });
     }
   });
   return (await doc.save()).buffer as ArrayBuffer;

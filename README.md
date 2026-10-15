@@ -27,6 +27,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Tanda tangan / stempel | Gambar tangan di canvas atau unggah PNG/JPG, tempel per halaman |
 | Gambar ke PDF | PNG/JPEG → PDF |
 | Toolkit gambar | Kompres, resize massal, konversi PNG/JPEG/WebP; re-encode menghapus EXIF |
+| Tanda air gambar | Teks atau logo di foto PNG/JPEG/WebP, banyak sekaligus (ZIP); opsi sama dengan tanda air PDF |
 | Hapus latar | AI (U²-Net/ISNet, latar apa pun) atau mode warna solid → PNG transparan |
 | Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (opsional — lihat bawah) |
 

@@ -87,6 +87,8 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (req.operation === 'page-numbers') {
       outputs = [await addPageNumbers(req.inputs[0], req.options as never)];
     } else if (req.operation === 'watermark') {
+      const img = req.options?.imageBytes;
+      if (img instanceof ArrayBuffer) validateMagicBytes(img, String(req.options?.imageType || 'png'));
       outputs = [await addWatermark(req.inputs[0], req.options as never)];
     } else if (req.operation === 'metadata') {
       outputs = [await updateMetadata(req.inputs[0], req.options as never)];

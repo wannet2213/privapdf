@@ -44,7 +44,12 @@ export interface ImageConvertResult {
  * Dekode gambar (EXIF orientation dihormati browser), gambar ulang ke canvas
  * — langkah inilah yang menghapus seluruh metadata — lalu enkode ulang.
  */
-export async function convertImage(bytes: ArrayBuffer, opts: ImageConvertOptions): Promise<ImageConvertResult> {
+export async function convertImage(
+  bytes: ArrayBuffer,
+  opts: ImageConvertOptions,
+  /** Digambar di atas gambar sebelum enkode (mis. tanda air). */
+  overlay?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void,
+): Promise<ImageConvertResult> {
   const bitmap = await createImageBitmap(new Blob([bytes]));
   try {
     const { width, height } = scaledDimensions(bitmap.width, bitmap.height, opts.maxWidth);
@@ -59,6 +64,7 @@ export async function convertImage(bytes: ArrayBuffer, opts: ImageConvertOptions
       ctx.fillRect(0, 0, width, height);
     }
     ctx.drawImage(bitmap, 0, 0, width, height);
+    overlay?.(ctx, width, height);
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
         (b) => (b ? resolve(b) : reject(new Error('Gagal mengenkode gambar.'))),

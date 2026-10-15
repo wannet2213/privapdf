@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { describe, expect, it, vi } from 'vitest';
+import { PDFDocument, PDFPage, StandardFonts, rgb } from 'pdf-lib';
 import { createPdfToolkit } from 'pdfstudio';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf,
+  deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
   updateMetadata, cropPages, compressPdf, unlockPdf,
 } from '../../src/engines/pdf-native';
 
@@ -236,17 +236,8 @@ describe('addWatermark — opsi lanjutan', () => {
   });
 
   it('tileGap memengaruhi kepadatan ubin — kecil = lebih banyak', () => {
-    // Replikasi loop engine: jumlah ubin menurun saat gap membesar
-    const countTiles = (gap: number) => {
-      const size = 20, widest = 100, blockH = 0;
-      const stepX = widest + gap;
-      const stepY = blockH + size + gap;
-      let c = 0;
-      for (let y = stepY / 2; y < 842 + stepY; y += stepY) {
-        for (let x = -stepX; x < 595 + stepX; x += stepX) c++;
-      }
-      return c;
-    };
+    const countTiles = (gap: number) =>
+      watermarkCenters('tiled', 'center', 595, 842, { w: 100, h: 0, stepX: 100 + gap, stepY: 20 + gap }, 40).length;
     const dense = countTiles(20);   // rapat
     const sparse = countTiles(200); // renggang
     expect(dense).toBeGreaterThan(sparse);
@@ -254,10 +245,40 @@ describe('addWatermark — opsi lanjutan', () => {
     expect(sparse).toBeGreaterThan(0);
   });
 
+  it('watermarkCenters: pojok tanpa rotasi, offset + = kanan/bawah', () => {
+    const box = { w: 100, h: 50, stepX: 0, stepY: 0 };
+    expect(watermarkCenters('positioned', 'top-left', 600, 800, box, 40)).toEqual([{ x: 90, y: 65, rotate: false }]);
+    expect(watermarkCenters('positioned', 'bottom-right', 600, 800, box, 40)).toEqual([{ x: 510, y: 735, rotate: false }]);
+    expect(watermarkCenters('center', 'center', 600, 800, box, 40, 10, 20)).toEqual([{ x: 310, y: 420, rotate: true }]);
+  });
+
   it('addWatermark menerima tileGap dan menghasilkan PDF valid', async () => {
     const input = await makePdf(2);
     const output = await addWatermark(input, { text: 'UBIN', type: 'tiled', tileGap: 120, fontSize: 20, rotation: 30 });
     expect(await countPages(output)).toBe(2);
+  });
+});
+
+const TINY_PNG = new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')).buffer as ArrayBuffer;
+
+describe('addWatermark — gambar', () => {
+  it.each(['center', 'tiled', 'positioned'] as const)('mode %s menghasilkan PDF valid tanpa teks', async (type) => {
+    const input = await makePdf(2);
+    const output = await addWatermark(input, { type, position: 'top-right', imageBytes: TINY_PNG, imageType: 'png', imageScale: 0.2, rotation: 30, tileGap: 20 });
+    expect(await countPages(output)).toBe(2);
+  });
+
+  it('gambar berotasi tetap berpusat di titik tata letak (offset + = bawah)', async () => {
+    const spy = vi.spyOn(PDFPage.prototype, 'drawImage');
+    // Halaman 200×300, gambar 1×1 pada skala 0.5 → kotak 100×100
+    await addWatermark(await makePdf(1), { imageBytes: TINY_PNG, imageType: 'png', imageScale: 0.5, rotation: 45, offsetY: 20 });
+    const o = spy.mock.calls[0][1]!;
+    spy.mockRestore();
+    const r = (45 * Math.PI) / 180;
+    const cx = o.x! + (o.width! / 2) * Math.cos(r) - (o.height! / 2) * Math.sin(r);
+    const cy = o.y! + (o.width! / 2) * Math.sin(r) + (o.height! / 2) * Math.cos(r);
+    expect(cx).toBeCloseTo(100, 6);
+    expect(cy).toBeCloseTo(150 - 20, 6);
   });
 });
 

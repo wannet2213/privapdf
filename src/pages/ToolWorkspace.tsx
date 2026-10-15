@@ -286,7 +286,7 @@ export function ToolWorkspace() {
   };
 
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); setDragOver(false); choose(event.dataTransfer.files); };
-  const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit';
+  const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit' && toolId !== 'image-watermark';
 
   return <div className="workspace page">
     <Link className="back" to="/tools">← semua tools</Link>
@@ -346,6 +346,10 @@ export function ToolWorkspace() {
 
     {files.length > 0 && toolId === 'image-toolkit' && (
       <ImageToolkitPanel files={files} onProcess={handleImageToolkit} />
+    )}
+
+    {files.length > 0 && toolId === 'image-watermark' && (
+      <AnnotatePanel bytes={files[0].bytes} mode="watermark" images={files} onImages={handleImageToolkit} busy={busy} />
     )}
 
     {files.length > 0 && toolId === 'remove-bg' && (

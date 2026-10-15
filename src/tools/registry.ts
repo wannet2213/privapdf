@@ -11,7 +11,7 @@ export const tools: Tool[] = [
   { id: 'reorder-pages', label: 'Urutkan ulang', description: 'Susun ulang urutan halaman PDF.', accept: PDF },
   { id: 'rotate', label: 'Putar halaman', description: 'Putar semua halaman PDF.', accept: PDF },
   { id: 'page-numbers', label: 'Nomor halaman', description: 'Tambahkan nomor halaman otomatis ke PDF.', accept: PDF },
-  { id: 'watermark', label: 'Tanda air', description: 'Tambahkan teks tanda air transparan ke semua halaman.', accept: PDF },
+  { id: 'watermark', label: 'Tanda air', description: 'Tambahkan tanda air teks atau gambar transparan ke semua halaman.', accept: PDF },
   { id: 'crop', label: 'Potong halaman', description: 'Kustom margin untuk memotong semua halaman PDF.', accept: PDF },
   { id: 'compress', label: 'Kompres PDF', description: 'Optimasi struktur PDF untuk ukuran file lebih kecil.', accept: PDF },
   { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi, dengan password atau hapus restriction.', accept: PDF },
@@ -24,6 +24,7 @@ export const tools: Tool[] = [
   { id: 'flatten', label: 'Ratakan (flatten)', description: 'Kunci formulir dan anotasi menjadi konten statis yang tidak bisa diubah.', accept: PDF },
   { id: 'image-to-pdf', label: 'Gambar ke PDF', description: 'Buat PDF dari PNG atau JPEG.', accept: IMG },
   { id: 'image-toolkit', label: 'Toolkit gambar', description: 'Kompres, resize massal, dan konversi PNG/JPEG/WebP. Re-encode menghapus EXIF (GPS, info kamera).', accept: IMG_TOOLKIT },
+  { id: 'image-watermark', label: 'Tanda air gambar', description: 'Tambahkan tanda air teks atau logo ke foto (PNG/JPEG/WebP), satu atau banyak sekaligus.', accept: IMG_TOOLKIT },
   { id: 'remove-bg', label: 'Hapus latar', description: 'Buat latar warna solid jadi transparan (foto produk, logo). Pilih warna + toleransi, hasil PNG.', accept: IMG },
   { id: 'office-to-pdf', label: 'Office ke PDF', description: 'Konversi Word, Excel, PowerPoint, ODT/ODS/ODP, RTF, CSV, atau HTML secara lokal.', accept: OFFICE },
 ];
