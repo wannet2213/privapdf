@@ -6,7 +6,7 @@
 
 const TIMEOUT_MS = 10 * 60_000;
 
-export type BgModelQuality = 'cepat' | 'imgly-fp16' | 'imgly-quint8';
+export type BgModelQuality = 'cepat' | 'imgly-fp16' | 'imgly-quint8' | 'imgly-fp32';
 
 /** Hapus latar dengan u2netp. Buffer input tidak diubah (disalin internal). */
 export async function removeBackgroundAI(

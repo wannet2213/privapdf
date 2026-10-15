@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { applyKey, cornerColor } from '../lib/remove-bg';
 import { removeBackgroundAI, type BgModelQuality } from '../lib/remove-bg-ai';
-import { removeBackgroundImgly } from '../lib/remove-bg-imgly';
+import { removeBackgroundImgly, type ImglyModel } from '../lib/remove-bg-imgly';
 
 interface RemoveBgPanelProps {
   bytes: ArrayBuffer;
@@ -15,6 +15,14 @@ const hexRgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(3, 5), 16),
   parseInt(hex.slice(5, 7), 16),
 ];
+
+// Varian imgly dari pilihan panel. "Cepat" tidak ada di sini karena memakai
+// u2netp + onnxruntime-web sendiri (remove-bg-ai.ts).
+const IMGLY_MODEL: Partial<Record<BgModelQuality, ImglyModel>> = {
+  'imgly-fp32': 'isnet',
+  'imgly-fp16': 'isnet_fp16',
+  'imgly-quint8': 'isnet_quint8',
+};
 
 type Mode = 'ai' | 'solid';
 
@@ -124,10 +132,10 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
         stopTicker();
         setStatusText(message);
       };
-      const blob =
-        quality === 'imgly-fp16' || quality === 'imgly-quint8'
-          ? await removeBackgroundImgly(bytes, quality === 'imgly-quint8' ? 'isnet_quint8' : 'isnet_fp16', onStatus)
-          : await removeBackgroundAI(bytes, onStatus);
+      const imglyModel = IMGLY_MODEL[quality];
+      const blob = imglyModel
+        ? await removeBackgroundImgly(bytes, imglyModel, onStatus)
+        : await removeBackgroundAI(bytes, onStatus);
       setResultBlob(blob);
       setResultUrl(URL.createObjectURL(blob));
     } catch (e) {
@@ -159,14 +167,16 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
       {mode === 'ai' ? (
         <>
           <p className="split-hint">
-            Empat varian model, semuanya berjalan lokal di browser. Unduhan hanya sekali per browser.
+            Empat varian model, semuanya berjalan lokal di browser. Runtime ONNX (±11 MB) diunduh sekali;
+            setelah itu hanya model yang kamu pilih.
           </p>
           <div className="tool-form">
             <div className="tool-form-field">
               <label className="tool-form-label" htmlFor="rb-quality">Kualitas model</label>
               <select id="rb-quality" className="tool-form-input" value={quality} disabled={aiBusy || busy} onChange={(e) => setQuality(e.target.value as BgModelQuality)}>
-                <option value="imgly-fp16">Seimbang — imgly ISNet fp16, ±22 MB</option>
-                <option value="imgly-quint8">Ringan — imgly ISNet quint8, ±11 MB</option>
+                <option value="imgly-fp32">Maksimal — imgly ISNet fp32, ±168 MB</option>
+                <option value="imgly-fp16">Seimbang — imgly ISNet fp16, ±84 MB</option>
+                <option value="imgly-quint8">Ringan — imgly ISNet quint8, ±42 MB</option>
                 <option value="cepat">Cepat — u2netp, ±4 MB</option>
               </select>
             </div>

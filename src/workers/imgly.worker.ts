@@ -27,7 +27,10 @@ function sniffMime(bytes: ArrayBuffer): string {
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data as { type?: string; data?: ArrayBuffer; model?: string } | undefined;
   if (!msg || msg.type !== 'convert' || !msg.data) return;
-  const model = msg.model === 'isnet_quint8' ? 'isnet_quint8' : 'isnet_fp16';
+  // Daftar putih varian: nilai tak dikenal jatuh ke fp16, bukan ke model yang
+  // belum tentu ada di public/imgly/ (aset fp32 ±168 MB hanya diunduh
+  // `npm run setup:imgly` sejak varian "Maksimal" ditambahkan).
+  const model = msg.model === 'isnet' || msg.model === 'isnet_quint8' ? msg.model : 'isnet_fp16';
   try {
     const blob = await removeBackground(new Blob([msg.data], { type: sniffMime(msg.data) }), {
       publicPath: new URL('/imgly/', self.location.href).toString(),
