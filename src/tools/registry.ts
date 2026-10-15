@@ -2,7 +2,7 @@ export type Tool = { id: string; label: string; description: string; accept?: st
 const PDF = 'application/pdf,.pdf';
 const IMG = 'image/png,image/jpeg,.png,.jpg,.jpeg';
 const IMG_TOOLKIT = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
-const OFFICE = '.doc,.docx,.odt,.ods,.odp,.ppt,.pptx,.rtf,.csv,.html,.htm,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/html';
+const OFFICE = '.doc,.docx,.xls,.xlsx,.odt,.ods,.odp,.ppt,.pptx,.rtf,.csv,.html,.htm,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/html';
 
 export const tools: Tool[] = [
   { id: 'merge', label: 'Gabungkan PDF', description: 'Gabungkan beberapa PDF, atur urutan & hapus halaman secara visual.', accept: PDF },

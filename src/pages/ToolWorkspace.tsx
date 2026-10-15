@@ -5,7 +5,7 @@ import { readSessionFiles, clearSession, type SessionFile } from '../lib/file-se
 import { PDFDocument } from 'pdf-lib';
 import { runJob } from '../engine/engine-client';
 import type { Phase, SplitOptions } from '../engine/types';
-import { filterSupportedFiles } from '../lib/validation';
+import { filterSupportedFiles, validateCount } from '../lib/validation';
 import { uid } from '../lib/uid';
 import { createZip } from '../lib/zip';
 import { SplitPanel } from '../components/SplitPanel';
@@ -74,14 +74,20 @@ export function ToolWorkspace() {
   useEffect(() => { filesRef.current = files; }, [files]);
   useEffect(() => { const cleanup = () => clearSession(filesRef.current); window.addEventListener('pagehide', cleanup); window.addEventListener('beforeunload', cleanup); return () => { window.removeEventListener('pagehide', cleanup); window.removeEventListener('beforeunload', cleanup); cleanup(); }; }, []);
 
+  // Identitas stabil untuk prop MergePanel — tanpa ini parent re-render akan me-reload dokumen dan mereset urutan user.
+  // Dipanggil sebelum early return di bawah: jumlah hook harus sama di setiap render.
+  const mergeFiles = useMemo(() => files.map((f) => ({ bytes: f.bytes, name: f.name })), [files]);
+
   if (!tool) return <div className="page"><h1>Tool tidak ditemukan.</h1></div>;
 
+  const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit';
   const needsPageCount = toolId === 'split' || toolId === 'delete-pages' || toolId === 'reorder-pages' || toolId === 'rotate';
 
   const choose = async (list: FileList | null) => {
     if (!list) return;
     setDropRejected(false);
-    const accepted = filterSupportedFiles([...list], tool.accept);
+    // Drop bisa membawa banyak file walau input-nya single — alat satu-file hanya ambil yang pertama.
+    const accepted = filterSupportedFiles([...list], tool.accept).slice(0, singleFile ? 1 : undefined);
     if (!accepted.length) { setDropRejected(true); setStatus('Format file tidak didukung.'); return; }
     // Mulai unduh aset LibreOffice WASM (~74 MB setelah gzip) sekarang, berbarengan
     // dengan pembacaan berkas — bukan menunggu tombol konversi ditekan.
@@ -89,7 +95,7 @@ export function ToolWorkspace() {
     setPhase(undefined);
     setStatus('Membaca file…');
     try {
-      const next = await readSessionFiles([...list]);
+      const next = await readSessionFiles(accepted);
       setFiles(next);
       setPageCount(0);
       setStatus('File siap. Jalankan proses atau atur opsi.');
@@ -108,7 +114,9 @@ export function ToolWorkspace() {
     if (!accepted.length) { setStatus('Format file tidak didukung.'); return; }
     setStatus('Menambahkan file…');
     try {
-      const more = await readSessionFiles([...list]);
+      // Batas 10 file / 120 MB berlaku untuk seluruh sesi, bukan per batch tambahan.
+      validateCount([...files, ...accepted]);
+      const more = await readSessionFiles(accepted);
       setFiles((prev) => [...prev, ...more]);
       setStatus(`${more.length} file ditambahkan. Total ${files.length + more.length} file.`);
     } catch (e) { setStatus(e instanceof Error ? e.message : 'File tidak valid.'); }
@@ -172,9 +180,6 @@ export function ToolWorkspace() {
   const handleAnnotate = (opts: Record<string, unknown>) => runWorker(toolId!, [files[0].bytes], opts);
   const handleCrop = (opts: Record<string, unknown>) => runWorker('crop', [files[0].bytes], opts);
   const handleMergePages = (refs: PageRef[]) => runWorker('merge-pages', files.map((f) => f.bytes), { refs });
-
-  // Identitas stabil untuk prop MergePanel — tanpa ini parent re-render akan me-reload dokumen dan mereset urutan user
-  const mergeFiles = useMemo(() => files.map((f) => ({ bytes: f.bytes, name: f.name })), [files]);
 
   const handleFormTool = (values: Record<string, string | number>) => {
     const opts: Record<string, unknown> = {};
@@ -258,16 +263,18 @@ export function ToolWorkspace() {
 
   const handleImageToolkit = async (items: ImageOutput[]) => {
     setBusy(true);
-    if (items.length === 1) {
-      downloadBlobs([items[0].blob], [items[0].name], items[0].blob.type);
-      setStatus(`Selesai. ${items[0].name} telah diunduh.`);
-    } else {
-      setStatus('Mengemas ZIP…');
-      const bytes = await Promise.all(items.map((i) => i.blob.arrayBuffer()));
-      const zip = await createZip(bytes.map((b, i) => ({ name: items[i].name, bytes: b })));
-      downloadBlobs([zip], ['privapdf-gambar.zip'], 'application/zip');
-      setStatus(`Selesai. ${items.length} gambar dikemas dalam privapdf-gambar.zip.`);
-    }
+    try {
+      if (items.length === 1) {
+        downloadBlobs([items[0].blob], [items[0].name], items[0].blob.type);
+        setStatus(`Selesai. ${items[0].name} telah diunduh.`);
+      } else {
+        setStatus('Mengemas ZIP…');
+        const bytes = await Promise.all(items.map((i) => i.blob.arrayBuffer()));
+        const zip = await createZip(bytes.map((b, i) => ({ name: items[i].name, bytes: b })));
+        downloadBlobs([zip], ['privapdf-gambar.zip'], 'application/zip');
+        setStatus(`Selesai. ${items.length} gambar dikemas dalam privapdf-gambar.zip.`);
+      }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal mengemas ZIP.'); }
     setBusy(false);
   };
 
@@ -286,7 +293,6 @@ export function ToolWorkspace() {
   };
 
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); setDragOver(false); choose(event.dataTransfer.files); };
-  const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit';
 
   return <div className="workspace page">
     <Link className="back" to="/tools">← semua tools</Link>
@@ -414,7 +420,7 @@ export function ToolWorkspace() {
 
     {files.length > 0 && SIMPLE_BUTTON_TOOLS.has(toolId!) && (
       <button className="primary" onClick={() => {
-        const opts = toolId === 'image-to-pdf' ? { type: files[0]?.type.includes('jpeg') ? 'jpg' : 'png' } : toolId === 'office-to-pdf' ? { filename: files[0]?.name } : undefined;
+        const opts = toolId === 'image-to-pdf' ? { type: /\.jpe?g$/i.test(files[0]?.name ?? '') ? 'jpg' : 'png' } : toolId === 'office-to-pdf' ? { filename: files[0]?.name } : undefined;
         runWorker(toolId!, files.map((f) => f.bytes), opts);
       }} disabled={busy}>{busy ? 'Memproses…' : 'Jalankan proses →'}</button>
     )}

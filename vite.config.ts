@@ -25,6 +25,11 @@ function serveModelRuntime() {
   };
 }
 
+// Host tunnel/proxy publik untuk dev, dipisah koma: VITE_ALLOWED_HOSTS=dev.example.com
+// (Vite memblokir Host tak dikenal untuk mencegah DNS rebinding — jangan ganti
+// dengan allowedHosts: true).
+const allowedHosts = (process.env.VITE_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean);
+
 // COOP/COEP headers are required so the page is "crossOriginIsolated",
 // which enables SharedArrayBuffer (used by the LibreOffice WASM worker).
 const crossOriginIsolationHeaders = {
@@ -37,13 +42,11 @@ export default defineConfig({
   plugins: [react(), serveModelRuntime()],
   server: {
     headers: crossOriginIsolationHeaders,
-    // Host tunnel/proxy publik untuk dev (Vite memblokir Host tak dikenal
-    // untuk mencegah DNS rebinding — jangan ganti dengan allowedHosts: true).
-    allowedHosts: ['test.irwannet.my.id'],
+    allowedHosts,
   },
   preview: {
     headers: crossOriginIsolationHeaders,
-    allowedHosts: ['test.irwannet.my.id'],
+    allowedHosts,
   },
   worker: { format: 'es' },
   // onnxruntime-web memuat runtime .mjs-nya sendiri dari /models/bg/ (public/)

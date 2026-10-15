@@ -30,6 +30,8 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Hapus latar | AI (U²-Net/ISNet, latar apa pun) atau mode warna solid → PNG transparan |
 | Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (opsional — lihat bawah) |
 
+Batas per sesi: **50 MB per file, maksimal 10 file, total 120 MB** (termasuk file yang ditambahkan belakangan di Gabungkan PDF). Alat satu-file hanya memakai file pertama bila beberapa file dijatuhkan sekaligus; file berformat lain diabaikan.
+
 Catatan UX sentuh: **menyeret kartu/baris di layar sentuh = tahan dulu (±0,25 detik) baru seret**; geser sebelum itu tetap berfungsi sebagai scroll. Di mouse, drag langsung.
 
 ## Mulai cepat
@@ -76,7 +78,7 @@ npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/im
 Hasil build adalah **situs statis murni** (`dist/`) — tidak ada backend, tidak ada database. Yang dibutuhkan penyaji:
 
 1. **Header COOP/COEP** (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`) — **wajib** untuk Office ke PDF; tanpanya browser tidak memberi SharedArrayBuffer dan fitur itu mati.
-2. **SPA fallback** — semua rute tak dikenal menjawab `index.html` (status 200).
+2. **SPA fallback** — rute halaman tak dikenal (mis. `/tools/merge`) menjawab `index.html` (status 200, `Cache-Control: no-cache`). **Aset yang hilang** (`/assets/`, `/wasm/`, `/models/`, `/imgly/`, atau path berekstensi) sebaiknya **404**, bukan `index.html` — kalau tidak, tab lama yang meminta chunk versi sebelumnya menerima HTML yang tersimpan di cache sebagai aset.
 3. **MIME benar** — `.wasm` sebagai `application/wasm`; jangan menyajikan berkas `.ts` mentah.
 
 ### Cara 1 — server bawaan `npm run serve` (paling simpel, tanpa nginx/Caddy)
@@ -88,7 +90,7 @@ PORT=9000 npm run serve        # port lain
 HOST=127.0.0.1 npm run serve   # hanya lokal
 ```
 
-Server kecil tanpa dependensi (`scripts/serve-dist.mjs`) sudah mengurus semuanya: header keamanan + COOP/COEP, SPA fallback, MIME WASM, cache (aset ter-hash `immutable`), dan negosiasi `.br` → `.gz` → mentah.
+Server kecil tanpa dependensi (`scripts/serve-dist.mjs`) sudah mengurus semuanya: header keamanan + COOP/COEP, SPA fallback (aset yang hilang dijawab 404), MIME WASM, cache (aset ter-hash `immutable`, `index.html` selalu `no-cache`), dan negosiasi `.br` → `.gz` → mentah.
 
 Catatan: server ini **HTTP polos**. Untuk dipakai publik, taruh di balik HTTPS (reverse proxy, Cloudflare Tunnel, dsb.) — selain untuk keamanan, Office ke PDF hanya aktif di konteks aman (HTTPS atau `localhost`). Karena sekarang ada proses yang harus hidup, pasang service manager (`systemd`, `pm2`, dsb.) bila dipakai serius.
 
@@ -121,7 +123,15 @@ server {
     gzip_static on;                          # menyajikan .gz hasil setup:office
 
     location / {
-        try_files $uri $uri/ /index.html;    # SPA fallback
+        try_files $uri $uri/ /index.html;    # SPA fallback untuk rute halaman
+    }
+
+    location = /index.html {
+        expires epoch;                       # Cache-Control: no-cache — jangan pakai add_header
+    }                                        # di sini: itu membuang header level server
+
+    location ~ ^/(assets|wasm|models|imgly)/ {
+        try_files $uri =404;                 # aset hilang → 404, bukan index.html
     }
 }
 ```
@@ -131,7 +141,8 @@ server {
 ```caddyfile
 contoh-domain-anda.com {
     root * /var/www/privapdf
-    try_files {path} /index.html
+    @page not path /assets/* /wasm/* /models/* /imgly/*
+    try_files @page {path} /index.html       # aset hilang tetap 404
     header {
         Cross-Origin-Opener-Policy same-origin
         Cross-Origin-Embedder-Policy require-corp
@@ -150,7 +161,7 @@ Caddy otomatis mengurus HTTPS. Untuk nginx + HTTPS, letakkan sertifikat (certbot
 
 ### Cara 3 — Cloudflare Pages / Vercel / Netlify (host statis gratis)
 
-Repo sudah menyertakan `public/_headers`, `public/_redirects`, dan `vercel.json` — COOP/COEP, header keamanan, dan SPA fallback ikut otomatis. Build command `npm run build`, output `dist`.
+Repo sudah menyertakan `public/_headers`, `public/_redirects`, dan `vercel.json` — COOP/COEP, header keamanan, dan SPA fallback ikut otomatis. Build command `npm run build`, output `dist`. Catatan: fallback bawaan platform ini juga menjawab `index.html` untuk aset yang hilang; bila setelah deploy muncul galat memuat chunk, refresh halaman.
 
 **Batasan keras:** platform Pages menolak berkas statis > 25 MB, sedangkan aset Office 237 MB. Hapus dulu sebelum build:
 
@@ -179,6 +190,8 @@ Hasilnya semua tool jalan **kecuali Office ke PDF**. Memunculkannya kembali butu
 curl -sI https://domain-anda.com/ | grep -i cross-origin                 # COOP/COEP tampil
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
   https://domain-anda.com/wasm/office/soffice.wasm                       # 200 application/wasm
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://domain-anda.com/assets/tidak-ada.js                            # 404 (bukan 200)
 curl -s https://domain-anda.com/ | grep -c googleapis                    # harus 0
 ```
 
@@ -199,7 +212,7 @@ curl -s https://domain-anda.com/ | grep -c googleapis                    # harus
 
 Validasi wajib sebelum push: `npm run check`, `npm test`, `npm audit` (0 kerentanan).
 
-**Dev lewat tunnel/domain sendiri:** Vite menolak `Host` tak dikenal (proteksi DNS rebinding). Tambahkan domainmu ke `server.allowedHosts` di `vite.config.ts` — jangan pakai `allowedHosts: true`.
+**Dev lewat tunnel/domain sendiri:** Vite menolak `Host` tak dikenal (proteksi DNS rebinding). Isi env var `VITE_ALLOWED_HOSTS` (pisahkan dengan koma), mis. `VITE_ALLOWED_HOSTS=dev.domainku.com npm run dev` — jangan ganti dengan `allowedHosts: true`.
 
 **Aturan worker yang dijaga `check-dist`:** `new URL(...)` wajib inline di dalam `new Worker(...)`. Disimpan ke variabel dulu = Vite memperlakukannya sebagai aset biasa, `.ts` mentah ikut ke dist, worker mati di produksi.
 
@@ -233,10 +246,12 @@ Laporan audit keamanan: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) (snapshot pada 
 - **Office lambat/gagal**: jalankan `npm run setup:office`, restart dev server. Pemakaian pertama memang mengunduh ±50 MB (brotli) + kompilasi WASM — progres tampil di layar; aset mulai diunduh begitu file dipilih, jadi jeda sebentar sebelum menekan tombol konversi mempercepat. Batas konversi 10 menit.
 - **Proses tampak berhenti**: bila tidak ada kemajuan ±20 detik, aplikasi menampilkan petunjuk muat ulang di baris status — refresh halaman lalu ulangi.
 - **Build ditolak `scripts/check-dist.mjs`**: ada worker yang tidak dikenali Vite. Perbaiki dengan pola `new Worker(new URL(...))` **inline** (lihat Pengembangan). Jangan dipaksa deploy — fiturnya mati hanya di produksi.
-- **"Blocked request. This host is not allowed"**: tambahkan domain ke `server.allowedHosts` di `vite.config.ts`, restart dev server.
+- **"Blocked request. This host is not allowed"**: jalankan ulang dev server dengan `VITE_ALLOWED_HOSTS=domainmu npm run dev`.
 - **Deep link 404**: pastikan SPA fallback aktif (`try_files $uri $uri/ /index.html` di nginx; `_redirects`/`vercel.json` di platform Pages).
 - **Aset `.ts` disajikan sebagai `video/mp2t`**: pemetaan bawaan nginx — yang salah adalah `.ts` mentah ikut ke `dist/`; `scripts/check-dist.mjs` yang mencegahnya.
-- **File ditolak**: file rusak atau ekstensi tidak cocok sengaja ditolak (magic bytes diverifikasi).
+- **File ditolak**: file rusak atau ekstensi tidak cocok sengaja ditolak (magic bytes diverifikasi). Penolakan juga terjadi bila melewati batas sesi (50 MB per file, 10 file, total 120 MB).
+- **Office ke PDF menolak file Excel**: pastikan ekstensinya `.xls`/`.xlsx` — file tanpa ekstensi dan tanpa tipe MIME dari browser tidak bisa dikenali.
+- **PDF ke gambar: "halaman terlalu besar"**: canvas melewati batas browser pada resolusi tinggi. Pilih resolusi Standar (1x) atau Tinggi (2x).
 - **Drag tidak jalan di HP**: tahan kartu ±0,25 detik sampai terlihat "terangkat", baru seret.
 - **Isi formulir kosong**: PDF bukan AcroForm (tidak punya field). Gunakan tanda tangan untuk mengisi manual, atau flatten untuk mengunci anotasi.
-- **Aset lama saat deploy**: unregister service worker lalu reload setelah deployment.
+- **Aset lama saat deploy**: chunk versi lama yang sudah tidak ada dijawab 404 oleh `npm run serve` (dan konfigurasi nginx/Caddy di atas). Bila tampilan masih lama, unregister service worker lalu reload.

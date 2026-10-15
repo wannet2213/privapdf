@@ -90,6 +90,12 @@ createServer((req, res) => {
     if (fileStat) file = dirIndex;
   }
   if (!fileStat) {
+    // Aset yang hilang (chunk lama setelah deploy, WASM belum di-setup) harus 404 —
+    // bila dijawab index.html, HTML itu ikut tercache dengan aturan aset (immutable).
+    if (extname(pathname) || /^\/(assets|wasm|models|imgly)\//.test(pathname)) {
+      res.writeHead(404, { ...SECURITY_HEADERS, 'Cache-Control': 'no-cache' }).end();
+      return;
+    }
     // Rute SPA (mis. /gabung) tidak ada di disk — setara try_files ... /index.html.
     file = join(ROOT, 'index.html');
     fileStat = statFile(file);
@@ -102,7 +108,7 @@ createServer((req, res) => {
   const headers = {
     ...SECURITY_HEADERS,
     'Content-Type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'Cache-Control': cacheControl(pathname),
+    'Cache-Control': file === join(ROOT, 'index.html') ? 'no-cache' : cacheControl(pathname),
   };
 
   // Prakompresi: .br (brotli) diutamakan, .gz sebagai fallback. Keduanya

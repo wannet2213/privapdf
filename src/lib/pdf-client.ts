@@ -53,9 +53,11 @@ export async function pdfToImages(
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context tidak tersedia di browser ini.');
     await page.render({ canvasContext: ctx, viewport }).promise;
-    const blob = await new Promise<Blob>((resolve) => {
-      canvas.toBlob((b) => resolve(b!), `image/${format}`, quality);
-    });
+    // toBlob memberi null bila canvas melebihi batas browser (mis. halaman besar pada 3x).
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format}`, quality));
+    canvas.width = 0; canvas.height = 0;
+    page.cleanup();
+    if (!blob) throw new Error(`Halaman ${pageNum} terlalu besar untuk dirender pada resolusi ini. Coba resolusi lebih rendah.`);
     results.push(blob);
     onProgress?.(i + 1, total);
   }
