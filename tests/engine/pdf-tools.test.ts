@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
-  updateMetadata, cropPages, compressPdf, unlockPdf,
+  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf,
 } from '../../src/engines/pdf-native';
 
 async function makePdf(pages: number): Promise<ArrayBuffer> {
@@ -426,6 +426,17 @@ describe('compressPdf', () => {
     const output = await compressPdf(input);
     const doc = await PDFDocument.load(output);
     expect(doc.getCreator()).toBe('PrivaPDF');
+  });
+});
+
+describe('jpegsToPdf', () => {
+  // Header JPEG minimal (SOI + SOF0): pdf-lib hanya membaca dimensi, tidak mendekode.
+  const jpeg = (w: number, h: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 0xff, w >> 8, w & 0xff, 0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xff, 0xd9]).buffer;
+
+  it('restores page size in points from render scale', async () => {
+    const output = await jpegsToPdf([jpeg(1190, 1684), jpeg(1684, 1190)], 2);
+    const doc = await PDFDocument.load(output);
+    expect(doc.getPages().map((p) => [p.getWidth(), p.getHeight()])).toEqual([[595, 842], [842, 595]]);
   });
 });
 

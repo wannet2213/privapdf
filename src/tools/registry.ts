@@ -13,7 +13,7 @@ export const tools: Tool[] = [
   { id: 'page-numbers', label: 'Nomor halaman', description: 'Tambahkan nomor halaman otomatis ke PDF.', accept: PDF },
   { id: 'watermark', label: 'Tanda air', description: 'Tambahkan tanda air teks atau gambar transparan ke semua halaman.', accept: PDF },
   { id: 'crop', label: 'Potong halaman', description: 'Kustom margin untuk memotong semua halaman PDF.', accept: PDF },
-  { id: 'compress', label: 'Kompres PDF', description: 'Optimasi struktur PDF untuk ukuran file lebih kecil.', accept: PDF },
+  { id: 'compress', label: 'Kompres PDF', description: 'Perkecil ukuran PDF. Tingkat Sedang/Kuat merender ulang halaman jadi gambar, efektif untuk hasil scan.', accept: PDF },
   { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi, dengan password atau hapus restriction.', accept: PDF },
   { id: 'protect', label: 'Beri password', description: 'Enkripsi PDF dengan password (AES-256) agar hanya bisa dibuka oleh pemegang password.', accept: PDF },
   { id: 'metadata', label: 'Edit metadata', description: 'Ubah judul, penulis, subjek, dan kata kunci PDF.', accept: PDF },

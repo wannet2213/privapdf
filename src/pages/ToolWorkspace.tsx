@@ -17,7 +17,7 @@ import { RotatePanel } from '../components/RotatePanel';
 import { MergePanel, type PageRef } from '../components/MergePanel';
 import { ToolOptionsForm, type Field } from '../components/ToolOptionsForm';
 import { pdfToImages, extractText } from '../lib/pdf-client';
-import { stampImage, type StampOptions } from '../engines/pdf-native';
+import { stampImage, jpegsToPdf, type StampOptions } from '../engines/pdf-native';
 import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
@@ -48,7 +48,23 @@ const PDF_TO_IMAGE_FIELDS: Field[] = [
   { name: 'scale', label: 'Resolusi', type: 'select', default: '2', options: [{ value: '1', label: 'Standar (1x)' }, { value: '2', label: 'Tinggi (2x)' }, { value: '3', label: 'Maksimum (3x)' }] },
 ];
 
-const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'compress']);
+const COMPRESS_FIELDS: Field[] = [
+  { name: 'level', label: 'Tingkat kompresi', type: 'select', default: 'ringan', options: [
+    { value: 'ringan', label: 'Ringan: rapikan struktur, teks tetap bisa dipilih' },
+    { value: 'sedang', label: 'Sedang: halaman jadi gambar 144 dpi' },
+    { value: 'kuat', label: 'Kuat: halaman jadi gambar 108 dpi, ukuran terkecil' },
+  ] },
+];
+
+// Render ulang halaman jadi JPEG; skala 1 = 72 dpi.
+const RASTER_LEVELS: Record<string, { scale: number; quality: number }> = {
+  sedang: { scale: 2, quality: 0.7 },
+  kuat: { scale: 1.5, quality: 0.5 },
+};
+
+const formatSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toLocaleString('id-ID', { maximumFractionDigits: 1 })} MB`;
+
+const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf']);
 
 const IS_TOUCH = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -259,7 +275,27 @@ export function ToolWorkspace() {
     setStatus('Selesai. PDF formulir terisi telah diunduh.');
   };
 
-  const handleFlatten = () => runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
+  const handleCompress = async (values: Record<string, string | number>) => {
+    const raster = RASTER_LEVELS[values.level];
+    if (!raster) { runWorker('compress', [files[0].bytes]); return; }
+    const input = files[0].bytes;
+    setBusy(true); setStatus('Merender halaman…');
+    try {
+      const blobs = await pdfToImages(input, { format: 'jpeg', ...raster }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
+      setStatus('Menyusun PDF…');
+      const out = await jpegsToPdf(await Promise.all(blobs.map((b) => b.arrayBuffer())), raster.scale);
+      const sizes = `${formatSize(input.byteLength)} → ${formatSize(out.byteLength)}`;
+      // PDF teks/vektor justru membengkak saat dijadikan gambar — jangan unduhkan hasil yang lebih besar.
+      if (out.byteLength >= input.byteLength) setStatus(`Hasil tidak lebih kecil (${sizes}), jadi tidak diunduh. PDF ini kebanyakan teks/vektor, pakai tingkat Ringan.`);
+      else {
+        downloadBuffer(out, 'kompres');
+        setStatus(`Selesai. ${sizes} (−${Math.round((1 - out.byteLength / input.byteLength) * 100)}%).`);
+      }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Kompresi gagal.'); }
+    setBusy(false);
+  };
+
+  const handleFlatten = () =>runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
 
   const handleImageToolkit = async (items: ImageOutput[]) => {
     setBusy(true);
@@ -340,6 +376,12 @@ export function ToolWorkspace() {
 
     {files.length > 0 && toolId === 'pdf-to-image' && (
       <ToolOptionsForm fields={PDF_TO_IMAGE_FIELDS} onProcess={handlePdfToImage} onSecondary={handlePdfToImageZip} secondaryLabel="Konversi halaman → ZIP" busy={busy} submitLabel={`Konversi ${pageCount || 'semua'} halaman →`} />
+    )}
+
+    {files.length > 0 && toolId === 'compress' && (
+      <ToolOptionsForm fields={COMPRESS_FIELDS} onProcess={handleCompress} busy={busy} submitLabel="Kompres PDF →">
+        <p className="split-hint">Ringan hampir tidak mengecilkan PDF hasil scan atau yang penuh foto. Untuk itu pilih Sedang atau Kuat, tapi teks di hasilnya tidak bisa dipilih atau dicari lagi.</p>
+      </ToolOptionsForm>
     )}
 
     {files.length > 0 && toolId === 'extract-text' && (

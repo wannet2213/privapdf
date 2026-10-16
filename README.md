@@ -16,7 +16,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Nomor halaman | Posisi, format (angka/romawi), font, offset |
 | Tanda air | Teks atau gambar; center, tile, posisi, custom font TTF/OTF |
 | Potong halaman | Margin custom, global atau per halaman |
-| Kompres PDF | Object streams + bersih-bersih metadata |
+| Kompres PDF | Ringan: object streams + bersih-bersih metadata. Sedang/Kuat: render ulang halaman jadi JPEG (144/108 dpi), hasil tidak diunduh bila malah lebih besar |
 | Hapus proteksi | Buka PDF terenkripsi (user/owner password) via qpdf |
 | Beri password | Enkripsi AES-256, dengan password pemilik opsional |
 | Edit metadata | Judul, penulis, subjek, kata kunci, pembuat |

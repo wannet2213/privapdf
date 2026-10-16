@@ -120,6 +120,18 @@ export async function imageToPdf(input: ArrayBuffer, type: 'png' | 'jpg'): Promi
   return (await doc.save()).buffer as ArrayBuffer;
 }
 
+/** Susun PDF dari JPEG hasil render halaman; ukuran halaman kembali ke poin asli (piksel / skala render). */
+export async function jpegsToPdf(jpgs: ArrayBuffer[], scale: number): Promise<ArrayBuffer> {
+  const doc = await PDFDocument.create();
+  for (const jpg of jpgs) {
+    const image = await doc.embedJpg(jpg);
+    const page = doc.addPage([image.width / scale, image.height / scale]);
+    page.drawImage(image, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+  }
+  doc.setProducer('PrivaPDF');
+  return (await doc.save({ useObjectStreams: true })).buffer as ArrayBuffer;
+}
+
 /** Hapus halaman berdasarkan index 0-based. */
 export async function deletePages(input: ArrayBuffer, indices: number[]): Promise<ArrayBuffer> {
   const doc = await PDFDocument.load(input);
