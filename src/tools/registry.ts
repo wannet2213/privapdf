@@ -21,6 +21,7 @@ export const tools: Tool[] = [
   { id: 'redact', label: 'Sensor PDF', description: 'Tutup permanen data sensitif (NIK, nomor rekening, alamat) dengan kotak hitam. Teks di bawahnya benar-benar dihapus.', accept: PDF },
   { id: 'sanitize', label: 'Bersihkan PDF', description: 'Hapus data tersembunyi sebelum berbagi: info penulis, metadata, lampiran, JavaScript, dan riwayat revisi.', accept: PDF },
   { id: 'pdf-to-image', label: 'PDF ke gambar', description: 'Konversi setiap halaman PDF menjadi PNG atau JPEG.', accept: PDF },
+  { id: 'ocr', label: 'OCR PDF hasil scan', description: 'Kenali teks di PDF hasil scan agar bisa dicari dan disalin. Bahasa Indonesia & Inggris, diproses di perangkatmu.', accept: PDF },
   { id: 'extract-text', label: 'Ekstrak teks', description: 'Ambil semua teks dari PDF dan simpan sebagai file teks.', accept: PDF },
   { id: 'sign', label: 'Tanda tangan / stempel', description: 'Gambar tanda tangan atau unggah gambar stempel, lalu tempel di halaman mana pun.', accept: PDF },
   { id: 'fill-form', label: 'Isi formulir', description: 'Isi field formulir PDF (teks, checkbox, dropdown) langsung dari browser.', accept: PDF },

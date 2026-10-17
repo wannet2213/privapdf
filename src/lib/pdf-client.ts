@@ -20,7 +20,7 @@ export interface ExtractTextResult {
   pages: number;
 }
 
-async function loadPdfDoc(bytes: ArrayBuffer) {
+export async function loadPdfDoc(bytes: ArrayBuffer) {
   if (bytes.byteLength > MAX_RENDER_BYTES) throw new Error('File terlalu besar untuk dirender di browser.');
   const doc = await getDocument({ data: bytes.slice(0) }).promise;
   if (doc.numPages > MAX_RENDER_PAGES) throw new Error(`Terlalu banyak halaman (${doc.numPages}). Maksimal ${MAX_RENDER_PAGES}.`);

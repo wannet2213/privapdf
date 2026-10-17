@@ -1,4 +1,7 @@
-import { PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, type PDFObject, degrees, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
+import {
+  PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, type PDFObject, degrees,
+  pushGraphicsState, popGraphicsState, beginText, endText, setTextRenderingMode, TextRenderingMode,
+  setFontAndSize, setCharacterSqueeze, rotateAndSkewTextDegreesAndTranslate, showText, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
 
@@ -876,6 +879,39 @@ export async function nUpPdf(input: ArrayBuffer, layout: NupLayout): Promise<Arr
     });
   }
   return (await out.save({ useObjectStreams: true })).buffer as ArrayBuffer;
+}
+
+/** Kata hasil OCR dalam koordinat PDF halaman: titik awal baseline, lebar & ukuran dalam poin. */
+export interface TextLayerWord { text: string; x: number; y: number; size: number; width: number; rotation: number }
+
+/** Tambahkan lapisan teks tak terlihat (render mode 3) agar PDF hasil scan bisa dicari dan disalin. */
+export async function addTextLayer(input: ArrayBuffer, pages: TextLayerWord[][]): Promise<ArrayBuffer> {
+  const doc = await PDFDocument.load(input);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const charset = new Set(font.getCharacterSet());
+  doc.getPages().forEach((page, i) => {
+    const words = pages[i];
+    if (!words?.length) return;
+    // Konten lama yang meninggalkan CTM tanpa Q sudah dibungkus q…Q oleh pdf-lib (autoNormalizeCTM).
+    const fontKey = page.node.newFontDictionary(font.name, font.ref);
+    const ops = [pushGraphicsState(), beginText(), setTextRenderingMode(TextRenderingMode.Invisible)];
+    for (const w of words) {
+      // Helvetica standar hanya WinAnsi; karakter di luarnya diganti agar encode tidak gagal.
+      const text = [...w.text].map((c) => (charset.has(c.codePointAt(0)!) ? c : '?')).join('');
+      const natural = font.widthOfTextAtSize(text, w.size);
+      if (!natural) continue;
+      ops.push(
+        setFontAndSize(fontKey, w.size),
+        // Tz meregangkan kata selebar bbox-nya, sehingga sorotan saat mencari/memilih pas dengan gambar.
+        setCharacterSqueeze((w.width / natural) * 100),
+        rotateAndSkewTextDegreesAndTranslate(w.rotation, 0, 0, w.x, w.y),
+        showText(font.encodeText(`${text} `)),
+      );
+    }
+    ops.push(endText(), popGraphicsState());
+    page.pushOperators(...ops);
+  });
+  return (await doc.save()).buffer as ArrayBuffer;
 }
 
 /**

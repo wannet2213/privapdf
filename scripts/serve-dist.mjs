@@ -44,10 +44,10 @@ const MIME = {
 const cacheControl = (pathname) => {
   if (pathname.startsWith('/assets/')) return 'public, max-age=31536000, immutable';
   if (pathname === '/' || pathname === '/index.html' || pathname === '/sw.js') return 'no-cache';
-  // /wasm/, /models/, /imgly/ hanya berubah lewat setup:* baru — bukan tiap
+  // /wasm/, /models/, /imgly/, /tesseract/ hanya berubah lewat setup:* baru — bukan tiap
   // deploy. 7 hari + service worker cache-first menjaga kunjungan ulang tetap
   // tanpa unduh ulang 237 MB.
-  if (pathname.startsWith('/wasm/') || pathname.startsWith('/models/') || pathname.startsWith('/imgly/')) {
+  if (/^\/(wasm|models|imgly|tesseract)\//.test(pathname)) {
     return 'public, max-age=604800';
   }
   return 'public, max-age=3600';
@@ -92,7 +92,7 @@ createServer((req, res) => {
   if (!fileStat) {
     // Aset yang hilang (chunk lama setelah deploy, WASM belum di-setup) harus 404 —
     // bila dijawab index.html, HTML itu ikut tercache dengan aturan aset (immutable).
-    if (extname(pathname) || /^\/(assets|wasm|models|imgly)\//.test(pathname)) {
+    if (extname(pathname) || /^\/(assets|wasm|models|imgly|tesseract)\//.test(pathname)) {
       res.writeHead(404, { ...SECURITY_HEADERS, 'Cache-Control': 'no-cache' }).end();
       return;
     }

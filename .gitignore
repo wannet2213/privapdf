@@ -8,6 +8,7 @@ build
 public/wasm
 public/models
 public/imgly
+public/tesseract
 *.tsbuildinfo
 .DS_Store
 .commandcode

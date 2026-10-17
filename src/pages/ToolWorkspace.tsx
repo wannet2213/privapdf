@@ -17,7 +17,7 @@ import { RotatePanel } from '../components/RotatePanel';
 import { MergePanel, type PageRef } from '../components/MergePanel';
 import { ToolOptionsForm, type Field } from '../components/ToolOptionsForm';
 import { pdfToImages, extractText } from '../lib/pdf-client';
-import { stampImage, jpegsToPdf, type StampOptions } from '../engines/pdf-native';
+import { stampImage, jpegsToPdf, addTextLayer, type StampOptions } from '../engines/pdf-native';
 import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
@@ -323,6 +323,28 @@ export function ToolWorkspace() {
     } catch (e) { setStatus(e instanceof Error ? e.message : 'Sensor gagal.'); setBusy(false); }
   };
 
+  const handleOcr = async (asText: boolean) => {
+    setBusy(true);
+    try {
+      // tesseract.js dimuat hanya saat dipakai — tidak membebani bundel utama.
+      const { ocrPdf } = await import('../lib/ocr');
+      const pages = await ocrPdf(files[0].bytes, setStatus);
+      const recognized = pages.filter((p) => !p.skipped).length;
+      const skippedNote = pages.length > recognized ? `, ${pages.length - recognized} halaman sudah berisi teks dan dilewati` : '';
+      if (asText) {
+        downloadBlobs([new Blob([pages.map((p) => p.text).join('\n\n')], { type: 'text/plain;charset=utf-8' })], [`${files[0].name.replace(/\.pdf$/i, '')}.txt`], 'text/plain');
+        setStatus(`Selesai. Teks ${pages.length} halaman telah diunduh.`);
+      } else if (!recognized) {
+        setStatus('Semua halaman sudah berisi teks, tidak ada yang perlu di-OCR.');
+      } else {
+        setStatus('Menyusun PDF…');
+        downloadBuffer(await addTextLayer(files[0].bytes, pages.map((p) => p.words)), 'ocr');
+        setStatus(`Selesai. ${recognized} halaman dikenali${skippedNote}.`);
+      }
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'OCR gagal.'); }
+    setBusy(false);
+  };
+
   const handleFlatten = () => runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
 
   const handleImageToolkit = async (items: ImageOutput[]) => {
@@ -419,6 +441,12 @@ export function ToolWorkspace() {
     {files.length > 0 && toolId === 'n-up' && (
       <ToolOptionsForm fields={NUP_FIELDS} onProcess={(values) => runWorker('n-up', [files[0].bytes], { layout: values.layout, filename: files[0].name })} busy={busy} submitLabel="Susun halaman →">
         <p className="split-hint">Buklet: cetak bolak-balik dengan balik di sisi pendek (short edge), tumpuk, lalu lipat di tengah. Jumlah halaman dilengkapi halaman kosong sampai kelipatan 4.</p>
+      </ToolOptionsForm>
+    )}
+
+    {files.length > 0 && toolId === 'ocr' && (
+      <ToolOptionsForm fields={[]} onProcess={() => handleOcr(false)} onSecondary={() => handleOcr(true)} secondaryLabel="Unduh teksnya saja (.txt)" busy={busy} submitLabel="Buat PDF bisa dicari →">
+        <p className="split-hint">Mengenali teks berbahasa Indonesia dan Inggris. Pemakaian pertama mengunduh mesin OCR ±8 MB, dan tiap halaman butuh beberapa detik. Halaman yang sudah berisi teks dilewati.</p>
       </ToolOptionsForm>
     )}
 

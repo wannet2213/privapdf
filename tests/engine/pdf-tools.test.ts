@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
-  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf, redactPdf, nUpPdf, bookletOrder,
+  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf, redactPdf, nUpPdf, bookletOrder, addTextLayer,
 } from '../../src/engines/pdf-native';
 
 async function makePdf(pages: number): Promise<ArrayBuffer> {
@@ -559,5 +559,43 @@ describe('nUpPdf', () => {
     // Tiap slide diskalakan selebar lembar (540/960), bukan setengahnya.
     const content = out.context.enumerateIndirectObjects().map(([, o]) => o instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(o).decode()) : '').join('\n');
     expect(content).toContain('0.5625 0 0 0.5625');
+  });
+});
+
+describe('addTextLayer', () => {
+  // pdf.js legacy build berjalan di Node — cara paling jujur memastikan teks benar-benar bisa dicari.
+  async function pageTexts(bytes: ArrayBuffer) {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)), isEvalSupported: false }).promise;
+    const out: { str: string; x: number; y: number }[][] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const items = (await (await doc.getPage(i)).getTextContent()).items as { str: string; transform: number[] }[];
+      out.push(items.filter((it) => it.str.trim()).map((it) => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] })));
+    }
+    return out;
+  }
+
+  it('adds invisible, searchable words at their positions, even after unbalanced content', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 300]);
+    // Konten asli meninggalkan CTM terskala tanpa Q — lapisan teks tidak boleh ikut tergeser
+    // (dijaga autoNormalizeCTM pdf-lib; tes ini menangkap bila perilaku itu berubah).
+    page.node.set(PDFName.of('Contents'), doc.context.register(doc.context.stream('q 2 0 0 2 0 0 cm')));
+    const out = await addTextLayer((await doc.save()).buffer as ArrayBuffer, [[
+      { text: 'Halo', x: 20, y: 250, size: 12, width: 30, rotation: 0 },
+      { text: 'Dunia', x: 60, y: 250, size: 12, width: 40, rotation: 0 },
+    ]]);
+    const [words] = await pageTexts(out);
+    expect(words.map((w) => w.str)).toEqual(['Halo', 'Dunia']);
+    expect(words.map((w) => [Math.round(w.x), Math.round(w.y)])).toEqual([[20, 250], [60, 250]]);
+    const content = (await PDFDocument.load(out)).context.enumerateIndirectObjects().map(([, o]) => (o instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(o).decode()) : '')).join('\n');
+    expect(content).toContain('3 Tr');
+  });
+
+  it('replaces characters outside WinAnsi instead of failing', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([200, 300]);
+    const out = await addTextLayer((await doc.save()).buffer as ArrayBuffer, [[{ text: 'ab\u4e2dc', x: 10, y: 10, size: 10, width: 30, rotation: 0 }]]);
+    expect((await pageTexts(out))[0].map((w) => w.str)).toEqual(['ab?c']);
   });
 });

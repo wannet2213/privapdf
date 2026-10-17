@@ -1,10 +1,10 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 25 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 26 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
 
 Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
 
-## Daftar Tool (25)
+## Daftar Tool (26)
 
 | Tool | Fungsi |
 | --- | --- |
@@ -26,6 +26,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Isi formulir | Isi field AcroForm (teks, checkbox, dropdown) + pratinjau |
 | Ratakan (flatten) | Kunci formulir/anotasi jadi konten statis |
 | PDF ke gambar | PNG/JPEG per halaman — terpisah atau satu ZIP |
+| OCR PDF hasil scan | tesseract.js (Indonesia + Inggris) → lapisan teks tak terlihat sehingga PDF bisa dicari/disalin, atau unduh .txt; halaman yang sudah berisi teks dilewati (butuh aset ±16 MB — lihat Opsional 3) |
 | Ekstrak teks | Semua teks ke file .txt |
 | Tanda tangan / stempel | Gambar tangan di canvas atau unggah PNG/JPG, tempel per halaman |
 | Gambar ke PDF | PNG/JPEG → PDF |
@@ -49,7 +50,7 @@ npm ci
 npm run dev
 ```
 
-Buka `http://localhost:5173` — sebagian besar tool langsung jalan. **Kecuali "Office ke PDF"** dan **varian AI "Hapus latar"**, karena asetnya sengaja tidak ikut repo — aktifkan dengan dua langkah opsional di bawah. Keduanya hanya butuh aset: tidak ada flag, semacam "mode aktif", atau konfigurasi lain — begitu aset ada, toolnya jalan.
+Buka `http://localhost:5173` — sebagian besar tool langsung jalan. **Kecuali "Office ke PDF"**, **varian AI "Hapus latar"**, dan **OCR**, karena asetnya sengaja tidak ikut repo — aktifkan dengan langkah opsional di bawah. Keduanya hanya butuh aset: tidak ada flag, semacam "mode aktif", atau konfigurasi lain — begitu aset ada, toolnya jalan.
 
 ### Opsional 1: Office ke PDF (aset ±237 MB)
 
@@ -80,12 +81,20 @@ npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/im
 - Runtime ONNX (±11 MB, satu varian saja — `ort-wasm-simd-threaded.wasm`; ±22 MB bila WebGPU yang dipakai) ikut terunduh pada pemakaian AI pertama; setelah itu hanya varian yang dipilih, dan hanya sekali per browser (Cache API).
 - Tanpa langkah ini, tab "Warna solid" pada tool Hapus latar tetap berfungsi.
 
+### Opsional 3: OCR (aset ±16 MB)
+
+```bash
+npm run setup:ocr      # tesseract.js + data bahasa Indonesia & Inggris → public/tesseract/
+```
+
+Menyalin dari `node_modules` (tanpa unduhan tambahan): worker, tiga varian core WASM LSTM (browser hanya mengunduh satu, ±3,9 MB), serta data bahasa `best_int` Indonesia ±1,2 MB dan Inggris ±2,9 MB. Pemakaian pertama di browser mengunduh ±8 MB; data bahasa lalu disimpan tesseract.js di IndexedDB.
+
 ## Deploy — pilih salah satu cara
 
 Hasil build adalah **situs statis murni** (`dist/`) — tidak ada backend, tidak ada database. Yang dibutuhkan penyaji:
 
 1. **Header COOP/COEP** (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`) — **wajib** untuk Office ke PDF; tanpanya browser tidak memberi SharedArrayBuffer dan fitur itu mati.
-2. **SPA fallback** — rute halaman tak dikenal (mis. `/tools/merge`) menjawab `index.html` (status 200, `Cache-Control: no-cache`). **Aset yang hilang** (`/assets/`, `/wasm/`, `/models/`, `/imgly/`, atau path berekstensi) sebaiknya **404**, bukan `index.html` — kalau tidak, tab lama yang meminta chunk versi sebelumnya menerima HTML yang tersimpan di cache sebagai aset.
+2. **SPA fallback** — rute halaman tak dikenal (mis. `/tools/merge`) menjawab `index.html` (status 200, `Cache-Control: no-cache`). **Aset yang hilang** (`/assets/`, `/wasm/`, `/models/`, `/imgly/`, `/tesseract/`, atau path berekstensi) sebaiknya **404**, bukan `index.html` — kalau tidak, tab lama yang meminta chunk versi sebelumnya menerima HTML yang tersimpan di cache sebagai aset.
 3. **MIME benar** — `.wasm` sebagai `application/wasm`; jangan menyajikan berkas `.ts` mentah.
 
 ### Cara 1 — server bawaan `npm run serve` (paling simpel, tanpa nginx/Caddy)
@@ -145,7 +154,7 @@ server {
         expires epoch;                       # Cache-Control: no-cache — jangan pakai add_header
     }                                        # di sini: itu membuang header level server
 
-    location ~ ^/(assets|wasm|models|imgly)/ {
+    location ~ ^/(assets|wasm|models|imgly|tesseract)/ {
         try_files $uri =404;                 # aset hilang → 404, bukan index.html
     }
 }
@@ -156,7 +165,7 @@ server {
 ```caddyfile
 contoh-domain-anda.com {
     root * /var/www/privapdf
-    @page not path /assets/* /wasm/* /models/* /imgly/*
+    @page not path /assets/* /wasm/* /models/* /imgly/* /tesseract/*
     try_files @page {path} /index.html       # aset hilang tetap 404
     header {
         Cross-Origin-Opener-Policy same-origin
@@ -219,6 +228,7 @@ curl -s https://domain-anda.com/ | grep -c googleapis                    # harus
 | `npm run setup:office` | Salin aset Office WASM + patch timeout + siapkan `.gz`/`.br` (opsional) |
 | `npm run setup:models` | Unduh model AI hapus latar + runtime ONNX (opsional) |
 | `npm run setup:imgly` | Unduh aset imgly background-removal (opsional) |
+| `npm run setup:ocr` | Salin aset OCR tesseract.js + data bahasa (opsional) |
 | `npm run check` | Type-check TypeScript |
 | `npm run check:dist` | Periksa `dist/` tanpa build penuh (aturan worker & `.ts` mentah) |
 | `npm test` | Seluruh test (vitest) |
@@ -247,6 +257,7 @@ new Worker(url, { type: 'module' });
 | `public/wasm/office/` | Aset LibreOffice WASM 237 MB + salinan `.gz`/`.br` — GitHub menolak file > 100 MB | `npm run setup:office` |
 | `public/models/bg/` | Model u2netp + runtime ONNX ±40 MB | `npm run setup:models` |
 | `public/imgly/` | Aset @imgly/background-removal ±330 MB (3 varian ISNet) | `npm run setup:imgly` |
+| `public/tesseract/` | Aset OCR tesseract.js ±16 MB | `npm run setup:ocr` |
 | `dist/` | Hasil build | `npm run build` |
 
 ## Privasi dan keamanan
