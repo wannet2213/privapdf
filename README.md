@@ -1,10 +1,10 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 24 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 25 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
 
 Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
 
-## Daftar Tool (24)
+## Daftar Tool (25)
 
 | Tool | Fungsi |
 | --- | --- |
@@ -15,6 +15,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Putar halaman | Rotasi semua atau halaman terpilih |
 | Nomor halaman | Posisi, format (angka/romawi), font, offset |
 | Tanda air | Teks atau gambar; center, tile, posisi, custom font TTF/OTF |
+| Halaman per lembar | 2 atau 4 halaman per lembar, atau buklet lipat tengah (dilengkapi halaman kosong sampai kelipatan 4); mengikuti rotasi & potongan halaman |
 | Potong halaman | Margin custom, global atau per halaman |
 | Kompres PDF | Ringan: object streams + bersih-bersih metadata. Sedang/Kuat: render ulang halaman jadi JPEG (144/108 dpi), hasil tidak diunduh bila malah lebih besar |
 | Hapus proteksi | Buka PDF terenkripsi (user/owner password) via qpdf |

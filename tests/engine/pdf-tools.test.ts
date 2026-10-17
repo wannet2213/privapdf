@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
-  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf, redactPdf,
+  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf, redactPdf, nUpPdf, bookletOrder,
 } from '../../src/engines/pdf-native';
 
 async function makePdf(pages: number): Promise<ArrayBuffer> {
@@ -532,5 +532,32 @@ describe('redactPdf', () => {
     expect(dump).toContain('AMAN-3');
     expect(out.getPages().map((p) => [p.getWidth(), p.getHeight()])).toEqual([[200, 300], [200, 300], [200, 300]]);
     expect(dump).toContain('/Subtype /Image');
+  });
+});
+
+describe('nUpPdf', () => {
+  it('orders booklet sides for fold-in-half printing, padding to a multiple of 4', () => {
+    expect(bookletOrder(8)).toEqual([7, 0, 1, 6, 5, 2, 3, 4]);
+    expect(bookletOrder(5)).toEqual([-1, 0, 1, -1, -1, 2, 3, 4]);
+  });
+
+  it('sizes sheets from the first page', async () => {
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < 5; i++) doc.addPage([595, 842]);
+    const input = (await doc.save()).buffer as ArrayBuffer;
+    const sheets = async (layout: '2' | '4' | 'booklet') => (await PDFDocument.load(await nUpPdf(input, layout))).getPages().map((p) => [p.getWidth(), p.getHeight()]);
+    expect(await sheets('2')).toEqual(Array(3).fill([842, 595]));
+    expect(await sheets('4')).toEqual(Array(2).fill([595, 842]));
+    expect(await sheets('booklet')).toEqual(Array(4).fill([842, 595]));
+  });
+
+  it('stacks landscape pages top and bottom for 2-up', async () => {
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < 2; i++) doc.addPage([960, 540]).drawText(`Slide ${i + 1}`, { x: 50, y: 270, size: 40 });
+    const out = await PDFDocument.load(await nUpPdf((await doc.save()).buffer as ArrayBuffer, '2'));
+    expect(out.getPages().map((p) => [p.getWidth(), p.getHeight()])).toEqual([[540, 960]]);
+    // Tiap slide diskalakan selebar lembar (540/960), bukan setengahnya.
+    const content = out.context.enumerateIndirectObjects().map(([, o]) => o instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(o).decode()) : '').join('\n');
+    expect(content).toContain('0.5625 0 0 0.5625');
   });
 });

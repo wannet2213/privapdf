@@ -63,6 +63,14 @@ const RASTER_LEVELS: Record<string, { scale: number; quality: number }> = {
   kuat: { scale: 1.5, quality: 0.5 },
 };
 
+const NUP_FIELDS: Field[] = [
+  { name: 'layout', label: 'Tata letak', type: 'select', default: '2', options: [
+    { value: '2', label: '2 halaman per lembar' },
+    { value: '4', label: '4 halaman per lembar' },
+    { value: 'booklet', label: 'Buklet (lipat tengah)' },
+  ] },
+];
+
 // Halaman tersensor dirender 144 dpi.
 const REDACT_SCALE = 2;
 
@@ -406,6 +414,12 @@ export function ToolWorkspace() {
 
     {files.length > 0 && toolId === 'redact' && (
       <RedactPanel bytes={files[0].bytes} onProcess={handleRedact} busy={busy} />
+    )}
+
+    {files.length > 0 && toolId === 'n-up' && (
+      <ToolOptionsForm fields={NUP_FIELDS} onProcess={(values) => runWorker('n-up', [files[0].bytes], { layout: values.layout, filename: files[0].name })} busy={busy} submitLabel="Susun halaman →">
+        <p className="split-hint">Buklet: cetak bolak-balik dengan balik di sisi pendek (short edge), tumpuk, lalu lipat di tengah. Jumlah halaman dilengkapi halaman kosong sampai kelipatan 4.</p>
+      </ToolOptionsForm>
     )}
 
     {files.length > 0 && toolId === 'extract-text' && (

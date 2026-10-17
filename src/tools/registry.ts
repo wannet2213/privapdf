@@ -12,6 +12,7 @@ export const tools: Tool[] = [
   { id: 'rotate', label: 'Putar halaman', description: 'Putar semua halaman PDF.', accept: PDF },
   { id: 'page-numbers', label: 'Nomor halaman', description: 'Tambahkan nomor halaman otomatis ke PDF.', accept: PDF },
   { id: 'watermark', label: 'Tanda air', description: 'Tambahkan tanda air teks atau gambar transparan ke semua halaman.', accept: PDF },
+  { id: 'n-up', label: 'Halaman per lembar', description: 'Cetak 2 atau 4 halaman dalam satu lembar, atau susun jadi buklet lipat.', accept: PDF },
   { id: 'crop', label: 'Potong halaman', description: 'Kustom margin untuk memotong semua halaman PDF.', accept: PDF },
   { id: 'compress', label: 'Kompres PDF', description: 'Perkecil ukuran PDF. Tingkat Sedang/Kuat merender ulang halaman jadi gambar, efektif untuk hasil scan.', accept: PDF },
   { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi, dengan password atau hapus restriction.', accept: PDF },

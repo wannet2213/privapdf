@@ -1,13 +1,13 @@
 import {
   mergePdf, mergePages, splitPdfEach, splitPdfGroups, splitPdfRanges, rotatePdf, imageToPdf,
-  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf, redactPdf,
+  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf, redactPdf, nUpPdf, type NupLayout,
 } from '../engines/pdf-native';
 import { officeToPdf } from '../engines/office-native';
 import { isJobRequest, errorEvent } from './protocol';
 import { validateMagicBytes } from '../lib/validation';
 import type { SplitMode } from './types';
 
-const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'sanitize']);
+const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'sanitize', 'n-up']);
 
 self.onmessage = async (e: MessageEvent) => {
   const req = e.data;
@@ -122,6 +122,12 @@ self.onmessage = async (e: MessageEvent) => {
       const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
       outputs = [await redactPdf(req.inputs[0], new Map(pages.map((p, i) => [p, req.inputs[i + 1]])), Number(req.options?.scale) || 2)];
       outputNames = [`${baseName}-disensor.pdf`];
+    } else if (req.operation === 'n-up') {
+      const layout = String(req.options?.layout || '2') as NupLayout;
+      if (!['2', '4', 'booklet'].includes(layout)) throw new Error('Tata letak tidak dikenal.');
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await nUpPdf(req.inputs[0], layout)];
+      outputNames = [`${baseName}-${layout === 'booklet' ? 'buklet' : `${layout}-per-lembar`}.pdf`];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

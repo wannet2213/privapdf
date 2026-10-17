@@ -811,6 +811,73 @@ export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
   return toArrayBuffer(await toolkit.raw([await doc.save()], ['$in0', '--object-streams=generate', '$out']));
 }
 
+export type NupLayout = '2' | '4' | 'booklet';
+
+/** Urutan halaman buklet per sisi lembar (kiri, kanan); -1 = halaman kosong pengisi kelipatan 4. */
+export function bookletOrder(count: number): number[] {
+  const n = Math.ceil(count / 4) * 4;
+  const order: number[] = [];
+  for (let k = 0; k < n / 2; k++) {
+    const pair = k % 2 === 0 ? [n - 1 - k, k] : [k, n - 1 - k];
+    order.push(...pair.map((i) => (i < count ? i : -1)));
+  }
+  return order;
+}
+
+/** Ukuran halaman seperti tampil di viewer: CropBox, ditukar bila /Rotate 90/270. */
+function displaySize(page: PDFPage, rotation: number): [number, number] {
+  const { width, height } = page.getCropBox();
+  return rotation % 180 ? [height, width] : [width, height];
+}
+
+/**
+ * Susun 2 atau 4 halaman per lembar, atau buklet (2 per sisi, urutan lipat tengah).
+ * Ukuran lembar mengikuti halaman pertama; 2-up dan buklet memakai orientasi kebalikannya.
+ */
+export async function nUpPdf(input: ArrayBuffer, layout: NupLayout): Promise<ArrayBuffer> {
+  const src = await PDFDocument.load(input);
+  const pages = src.getPages();
+  const out = await PDFDocument.create();
+  // Embed sebatas CropBox — tanpa ini halaman yang sudah dipotong muncul utuh lagi.
+  // Halaman tanpa /Contents (kosong) tidak bisa di-embed pdf-lib; biarkan selnya kosong.
+  const embedded = await Promise.all(pages.map((p) => {
+    const b = p.getCropBox();
+    return p.node.Contents() ? out.embedPage(p, { left: b.x, bottom: b.y, right: b.x + b.width, top: b.y + b.height }) : undefined;
+  }));
+  const rotations = pages.map((p) => ((p.getRotation().angle % 360) + 360) % 360);
+  const [w, h] = displaySize(pages[0], rotations[0]);
+  const [sheetW, sheetH] = layout === '4' ? [w, h] : [h, w];
+  // 2-up dari halaman landscape (mis. slide) → lembar portrait, halaman ditumpuk atas-bawah.
+  const cols = layout === '2' && sheetW < sheetH ? 1 : 2;
+  const rows = layout === '4' || cols === 1 ? 2 : 1;
+  const cellW = sheetW / cols;
+  const cellH = sheetH / rows;
+  const order = layout === 'booklet' ? bookletOrder(pages.length) : pages.map((_, i) => i);
+
+  for (let s = 0; s < order.length; s += cols * rows) {
+    const sheet = out.addPage([sheetW, sheetH]);
+    order.slice(s, s + cols * rows).forEach((idx, slot) => {
+      const page = embedded[idx];
+      if (!page) return;
+      const rot = rotations[idx];
+      const [pw, ph] = displaySize(pages[idx], rot);
+      const scale = Math.min(cellW / pw, cellH / ph);
+      const px = (slot % cols) * cellW + (cellW - pw * scale) / 2;
+      const py = sheetH - (Math.floor(slot / cols) + 1) * cellH + (cellH - ph * scale) / 2;
+      // drawPage memutar di titik (x, y): geser titik itu ke sudut yang tepat agar hasil putaran
+      // (searah jarum jam seperti /Rotate) tetap mengisi kotak px..px+lebar, py..py+tinggi.
+      sheet.drawPage(page, {
+        x: rot === 180 || rot === 270 ? px + pw * scale : px,
+        y: rot === 90 || rot === 180 ? py + ph * scale : py,
+        xScale: scale,
+        yScale: scale,
+        rotate: degrees(-rot),
+      });
+    });
+  }
+  return (await out.save({ useObjectStreams: true })).buffer as ArrayBuffer;
+}
+
 /**
  * Gabungkan halaman tertentu dari beberapa dokumen sesuai urutan yang diberikan.
  * Memungkinkan reorder lintas-dokumen dan penghapusan halaman.
