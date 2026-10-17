@@ -1816,3 +1816,41 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   background: var(--surface);
   cursor: pointer;
 }
+
+/* ===== Sensor (redaksi) ===== */
+/* Layer gambar menahan sentuhan (touch-action: none); batasi tinggi agar di ponsel
+   selalu ada area di luar halaman untuk menggulir. */
+.redact-wrap { width: fit-content; }
+.redact-wrap canvas { width: auto; max-height: 70vh; }
+.redact-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.redact-box {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  outline: 2px solid var(--accent);
+  pointer-events: none;
+}
+.redact-box.is-draft { background: rgba(0, 0, 0, 0.5); }
+.redact-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  line-height: 24px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.redact-remove:hover { background: var(--accent-hover); }
+.redact-remove:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

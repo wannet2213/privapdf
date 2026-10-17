@@ -3,7 +3,7 @@ import type { JobRequest, JobEvent, Operation } from './types';
 export const PROTOCOL_VERSION = 1;
 const operations: Operation[] = [
   'merge', 'merge-pages', 'split', 'rotate', 'image-to-pdf', 'pdf-to-image', 'office-to-pdf',
-  'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'extract-text', 'sanitize',
+  'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'extract-text', 'sanitize', 'redact',
 ];
 
 export function isJobRequest(value: unknown): value is JobRequest {

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PDFDocument, PDFName, PDFPage, PDFString, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFPage, PDFRawStream, PDFString, StandardFonts, decodePDFRawStream, rgb } from 'pdf-lib';
 import { createPdfToolkit } from 'pdfstudio';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
-  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf,
+  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf, redactPdf,
 } from '../../src/engines/pdf-native';
 
 async function makePdf(pages: number): Promise<ArrayBuffer> {
@@ -499,5 +499,38 @@ describe('sanitizePdf', () => {
     expect(dump).toContain('https://contoh.id');
     expect(out.getForm().getFields().map((f) => f.getName())).toEqual(['nama']);
     expect(out.getPageCount()).toBe(1);
+  });
+});
+
+describe('redactPdf', () => {
+  const jpeg = (w: number, h: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 0xff, w >> 8, w & 0xff, 0x03, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xff, 0xd9]).buffer;
+
+  it('replaces redacted pages and leaves no trace of their content', async () => {
+    const doc = await PDFDocument.create();
+    const ctx = doc.context;
+    // Resources dipakai bersama: XObject rahasia hanya dipanggil halaman 2 tapi terdaftar juga di halaman 1 & 3.
+    const secretForm = ctx.register(ctx.stream('0 0 m 9 9 l S % RAHASIA-XOBJ', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 10, 10] }));
+    const shared = ctx.register(ctx.obj({ XObject: { Sec: secretForm } }));
+    const pages = ['AMAN-1', 'RAHASIA-HAL2 /Sec Do', 'AMAN-3'].map((text) => {
+      const page = doc.addPage([200, 300]);
+      page.node.set(PDFName.of('Resources'), shared);
+      page.node.set(PDFName.of('Contents'), ctx.register(ctx.stream(`% ${text}`)));
+      return page;
+    });
+    // Tautan halaman 1 → halaman 2: copyPages ikut menyalin halaman 2 asli (qpdf lalu menggantinya dengan null).
+    pages[0].node.addAnnot(ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Link', Rect: [0, 0, 10, 10], Dest: [pages[1].ref, 'Fit'] })));
+    // Balasan (/IRT) di halaman 1 atas komentar di halaman 2: rantai dict biasa yang tetap disalin qpdf.
+    const note = ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Text', Rect: [0, 0, 10, 10], Contents: PDFString.of('RAHASIA-KOMENTAR') }));
+    pages[1].node.addAnnot(note);
+    pages[0].node.addAnnot(ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Text', Rect: [20, 0, 30, 10], IRT: note, Contents: PDFString.of('setuju') })));
+    doc.setAuthor('RAHASIA-PENULIS');
+
+    const out = await PDFDocument.load(await redactPdf((await doc.save()).buffer as ArrayBuffer, new Map([[1, jpeg(400, 600)]]), 2));
+    const dump = out.context.enumerateIndirectObjects().map(([, o]) => o instanceof PDFRawStream && !o.dict.toString().includes('/DCTDecode') ? o.dict.toString() + new TextDecoder('latin1').decode(decodePDFRawStream(o).decode()) : o.toString()).join('\n');
+    expect(dump).not.toContain('RAHASIA');
+    expect(dump).toContain('AMAN-1');
+    expect(dump).toContain('AMAN-3');
+    expect(out.getPages().map((p) => [p.getWidth(), p.getHeight()])).toEqual([[200, 300], [200, 300], [200, 300]]);
+    expect(dump).toContain('/Subtype /Image');
   });
 });

@@ -22,6 +22,7 @@ import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
 import { RemoveBgPanel } from '../components/RemoveBgPanel';
+import { RedactPanel, type Redactions } from '../components/RedactPanel';
 import { preloadOfficeConverter } from '../engines/office-native';
 
 const STALL_AFTER_MS = 20000;
@@ -61,6 +62,9 @@ const RASTER_LEVELS: Record<string, { scale: number; quality: number }> = {
   sedang: { scale: 2, quality: 0.7 },
   kuat: { scale: 1.5, quality: 0.5 },
 };
+
+// Halaman tersensor dirender 144 dpi.
+const REDACT_SCALE = 2;
 
 const formatSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toLocaleString('id-ID', { maximumFractionDigits: 1 })} MB`;
 
@@ -295,7 +299,23 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
-  const handleFlatten = () =>runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
+  const handleRedact = async (boxes: Redactions) => {
+    const pages = Object.keys(boxes).map(Number).filter((i) => boxes[i].length).sort((a, b) => a - b);
+    setBusy(true); setStatus('Merender halaman…');
+    try {
+      const blobs = await pdfToImages(files[0].bytes, {
+        format: 'jpeg', scale: REDACT_SCALE, quality: 0.85, pages,
+        // Lebihkan 0,5 pt (1 px) di tiap sisi agar piksel tepi yang ter-antialias ikut tertutup penuh.
+        draw: (ctx, page) => { ctx.fillStyle = '#000'; for (const b of boxes[page]) ctx.fillRect(b.x - 0.5, b.y - 0.5, b.w + 1, b.h + 1); },
+      }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
+      const jpgs = await Promise.all(blobs.map((b) => b.arrayBuffer()));
+      setBusy(false);
+      // Penyusunan butuh qpdf (WASM) — hanya boleh di worker; CSP halaman memblokir kompilasi WASM.
+      await runWorker('redact', [files[0].bytes, ...jpgs], { pages, scale: REDACT_SCALE, filename: files[0].name });
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Sensor gagal.'); setBusy(false); }
+  };
+
+  const handleFlatten = () => runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
 
   const handleImageToolkit = async (items: ImageOutput[]) => {
     setBusy(true);
@@ -382,6 +402,10 @@ export function ToolWorkspace() {
       <ToolOptionsForm fields={COMPRESS_FIELDS} onProcess={handleCompress} busy={busy} submitLabel="Kompres PDF →">
         <p className="split-hint">Ringan hampir tidak mengecilkan PDF hasil scan atau yang penuh foto. Untuk itu pilih Sedang atau Kuat, tapi teks di hasilnya tidak bisa dipilih atau dicari lagi.</p>
       </ToolOptionsForm>
+    )}
+
+    {files.length > 0 && toolId === 'redact' && (
+      <RedactPanel bytes={files[0].bytes} onProcess={handleRedact} busy={busy} />
     )}
 
     {files.length > 0 && toolId === 'extract-text' && (

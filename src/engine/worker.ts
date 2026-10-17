@@ -1,6 +1,6 @@
 import {
   mergePdf, mergePages, splitPdfEach, splitPdfGroups, splitPdfRanges, rotatePdf, imageToPdf,
-  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf,
+  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf, redactPdf,
 } from '../engines/pdf-native';
 import { officeToPdf } from '../engines/office-native';
 import { isJobRequest, errorEvent } from './protocol';
@@ -20,6 +20,7 @@ self.onmessage = async (e: MessageEvent) => {
       'office-to-pdf': String(req.options?.filename || 'document.docx').split('.').pop() || 'docx',
     };
     if (req.operation === 'image-to-pdf' || req.operation === 'office-to-pdf') validateMagicBytes(req.inputs[0], extensions[req.operation]);
+    else if (req.operation === 'redact') req.inputs.forEach((input, i) => validateMagicBytes(input, i ? 'jpg' : 'pdf'));
     else if (PDF_OPS.has(req.operation)) req.inputs.forEach((input) => validateMagicBytes(input, 'pdf'));
 
     send({ jobId: req.jobId, type: 'progress', phase: 'load engine', progress: .35 });
@@ -114,6 +115,13 @@ self.onmessage = async (e: MessageEvent) => {
       const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
       outputs = [await sanitizePdf(req.inputs[0])];
       outputNames = [`${baseName}-bersih.pdf`];
+    } else if (req.operation === 'redact') {
+      // inputs: [pdf, jpg halaman pages[0], jpg halaman pages[1], …]
+      const pages = (req.options?.pages as number[]) || [];
+      if (!pages.length || pages.length !== req.inputs.length - 1) throw new Error('Tidak ada halaman yang disensor.');
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await redactPdf(req.inputs[0], new Map(pages.map((p, i) => [p, req.inputs[i + 1]])), Number(req.options?.scale) || 2)];
+      outputNames = [`${baseName}-disensor.pdf`];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

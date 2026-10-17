@@ -123,13 +123,42 @@ export async function imageToPdf(input: ArrayBuffer, type: 'png' | 'jpg'): Promi
 /** Susun PDF dari JPEG hasil render halaman; ukuran halaman kembali ke poin asli (piksel / skala render). */
 export async function jpegsToPdf(jpgs: ArrayBuffer[], scale: number): Promise<ArrayBuffer> {
   const doc = await PDFDocument.create();
-  for (const jpg of jpgs) {
-    const image = await doc.embedJpg(jpg);
-    const page = doc.addPage([image.width / scale, image.height / scale]);
-    page.drawImage(image, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
-  }
+  for (const jpg of jpgs) await addJpegPage(doc, jpg, scale);
   doc.setProducer('PrivaPDF');
   return (await doc.save({ useObjectStreams: true })).buffer as ArrayBuffer;
+}
+
+async function addJpegPage(doc: PDFDocument, jpg: ArrayBuffer, scale: number) {
+  const image = await doc.embedJpg(jpg);
+  const page = doc.addPage([image.width / scale, image.height / scale]);
+  page.drawImage(image, { x: 0, y: 0, width: page.getWidth(), height: page.getHeight() });
+}
+
+// Kunci halaman yang aman disalin. Sisanya (Annots, B, AA, …) bisa merantai ke data halaman
+// tersensor, mis. balasan komentar (/IRT) atau field formulir (/Kids) yang nilainya ada di sana.
+const REDACT_PAGE_KEYS = new Set(['Type', 'Parent', 'MediaBox', 'CropBox', 'BleedBox', 'TrimBox', 'ArtBox', 'Rotate', 'Contents', 'Resources', 'Group', 'UserUnit']);
+
+/**
+ * Ganti halaman tersensor dengan gambarnya (kotak hitam sudah tertanam di piksel). Halaman lain
+ * disalin tanpa anotasi ke dokumen baru — info dokumen, bookmark, dan formulir tidak ikut.
+ */
+export async function redactPdf(input: ArrayBuffer, jpgs: Map<number, ArrayBuffer>, scale: number): Promise<ArrayBuffer> {
+  const src = await PDFDocument.load(input);
+  for (const page of src.getPages()) {
+    for (const [key] of page.node.entries()) if (!REDACT_PAGE_KEYS.has(key.decodeText())) page.node.delete(key);
+  }
+  const out = await PDFDocument.create();
+  const kept = await out.copyPages(src, src.getPageIndices().filter((i) => !jpgs.has(i)));
+  for (const i of src.getPageIndices()) {
+    const jpg = jpgs.get(i);
+    if (jpg) await addJpegPage(out, jpg, scale);
+    else out.addPage(kept.shift()!);
+  }
+  // Resources bisa dipakai bersama halaman tersensor, jadi gambar/teksnya ikut tersalin walau tak
+  // tampil. qpdf --pages memangkas resource yang tidak dipanggil konten tiap halaman, lalu hanya
+  // menulis objek yang masih terjangkau.
+  const toolkit = await getUnlockToolkit();
+  return toArrayBuffer(await toolkit.raw([await out.save()], ['--empty', '--pages', '$in0', '1-z', '--', '--remove-unreferenced-resources=yes', '--object-streams=generate', '$out']));
 }
 
 /** Hapus halaman berdasarkan index 0-based. */

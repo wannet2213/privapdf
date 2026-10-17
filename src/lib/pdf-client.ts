@@ -11,6 +11,8 @@ export interface PdfToImageOptions {
   scale?: number;
   quality?: number;
   pages?: number[];
+  /** Gambar di atas halaman sebelum di-encode; koordinat dalam poin halaman (kiri-atas = 0,0). */
+  draw?: (ctx: CanvasRenderingContext2D, pageIndex: number) => void;
 }
 
 export interface ExtractTextResult {
@@ -53,6 +55,7 @@ export async function pdfToImages(
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context tidak tersedia di browser ini.');
     await page.render({ canvasContext: ctx, viewport }).promise;
+    if (opts.draw) { ctx.setTransform(scale, 0, 0, scale, 0, 0); opts.draw(ctx, pageNum - 1); }
     // toBlob memberi null bila canvas melebihi batas browser (mis. halaman besar pada 3x).
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format}`, quality));
     canvas.width = 0; canvas.height = 0;
