@@ -1,8 +1,8 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 26 tool: PDF (gabung/split/rotate/…), formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 26 tool: PDF (gabung/split/rotate/…), kompres, sensor dan bersihkan data tersembunyi, OCR PDF hasil scan, formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
 
-Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0.
+Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0. OCR memakai `tesseract.js` (Apache-2.0) dengan data bahasa dari paket `@tesseract.js-data` (MIT).
 
 ## Daftar Tool (26)
 
@@ -50,7 +50,7 @@ npm ci
 npm run dev
 ```
 
-Buka `http://localhost:5173` — sebagian besar tool langsung jalan. **Kecuali "Office ke PDF"**, **varian AI "Hapus latar"**, dan **OCR**, karena asetnya sengaja tidak ikut repo — aktifkan dengan langkah opsional di bawah. Keduanya hanya butuh aset: tidak ada flag, semacam "mode aktif", atau konfigurasi lain — begitu aset ada, toolnya jalan.
+Buka `http://localhost:5173` — sebagian besar tool langsung jalan. **Kecuali "Office ke PDF"**, **varian AI "Hapus latar"**, dan **OCR**, karena asetnya sengaja tidak ikut repo — aktifkan dengan langkah opsional di bawah. Ketiganya hanya butuh aset: tidak ada flag, semacam "mode aktif", atau konfigurasi lain — begitu aset ada, toolnya jalan.
 
 ### Opsional 1: Office ke PDF (aset ±237 MB)
 
@@ -87,7 +87,9 @@ npm run setup:imgly    # aset @imgly/background-removal (AGPL-3.0) → public/im
 npm run setup:ocr      # tesseract.js + data bahasa Indonesia & Inggris → public/tesseract/
 ```
 
-Menyalin dari `node_modules` (tanpa unduhan tambahan): worker, tiga varian core WASM LSTM (browser hanya mengunduh satu, ±3,9 MB), serta data bahasa `best_int` Indonesia ±1,2 MB dan Inggris ±2,9 MB. Pemakaian pertama di browser mengunduh ±8 MB; data bahasa lalu disimpan tesseract.js di IndexedDB.
+Menyalin dari `node_modules` (tanpa unduhan tambahan): worker, tiga varian core WASM LSTM (browser hanya mengunduh satu, ±3,9 MB), serta data bahasa `best_int` Indonesia ±1,2 MB dan Inggris ±2,9 MB. Pemakaian pertama di browser mengunduh ±8 MB; data bahasa lalu disimpan tesseract.js di IndexedDB. Tanpa langkah ini HANYA tool OCR yang tidak jalan — tool itu menampilkan pesan bahwa asetnya belum dipasang.
+
+Jalankan ulang setelah `npm ci` yang menaikkan versi `tesseract.js`: worker dan core di `public/tesseract/` harus sama versinya dengan pustaka yang dibundel.
 
 ## Deploy — pilih salah satu cara
 
@@ -116,14 +118,15 @@ Catatan: server ini **HTTP polos**. Untuk dipakai publik, taruh di balik HTTPS (
 sudo systemctl daemon-reload && sudo systemctl enable --now privapdf
 ```
 
-Deploy ulang setelah pull/perubahan cukup `npm run build && sudo systemctl restart privapdf` — server menyajikan `dist/` langsung dari disk, tanpa rsync ke web root. Bila mesin yang sama juga menjalankan reverse proxy atau Cloudflare Tunnel, set `HOST=127.0.0.1` supaya port itu tidak terbuka ke jaringan: proxy/Tunnel tetap bisa menghubungi `http://127.0.0.1:<PORT>`, dan reverse proxy **tidak boleh** menambahkan header keamanan/COOP/COEP sendiri (server asal sudah mengirimnya — header kembar membuat COOP/COEP tidak sah).
+Deploy ulang setelah pull/perubahan cukup `npm run build && sudo systemctl restart privapdf` — server menyajikan `dist/` langsung dari disk, tanpa rsync ke web root. Aset `setup:*` (folder `public/` yang di-gitignore) tetap tersimpan di antara pull, jadi cukup dijalankan sekali di server — ulangi hanya bila `npm ci` menaikkan versi paketnya. Bila mesin yang sama juga menjalankan reverse proxy atau Cloudflare Tunnel, set `HOST=127.0.0.1` supaya port itu tidak terbuka ke jaringan: proxy/Tunnel tetap bisa menghubungi `http://127.0.0.1:<PORT>`, dan reverse proxy **tidak boleh** menambahkan header keamanan/COOP/COEP sendiri (server asal sudah mengirimnya — header kembar membuat COOP/COEP tidak sah).
 
 ### Cara 2 — nginx atau Caddy di VPS sendiri
 
 Build lalu unggah `dist/` ke server, misalnya ke `/var/www/privapdf`:
 
 ```bash
-npm run setup:office   # aset WASM + .gz/.br (wajib tiap deploy: public/wasm gitignored)
+npm run setup:office   # aset WASM + .gz/.br (public/wasm gitignored — wajib di salinan baru)
+npm run setup:ocr      # aset OCR (public/tesseract gitignored)
 npm run build          # tsc + vite build + pemeriksaan dist
 rsync -a --delete dist/ user@server:/var/www/privapdf/
 ```
@@ -187,6 +190,8 @@ Caddy otomatis mengurus HTTPS. Untuk nginx + HTTPS, letakkan sertifikat (certbot
 
 Repo sudah menyertakan `public/_headers`, `public/_redirects`, dan `vercel.json` — COOP/COEP, header keamanan, dan SPA fallback ikut otomatis. Build command `npm run build`, output `dist`. Catatan: fallback bawaan platform ini juga menjawab `index.html` untuk aset yang hilang; bila setelah deploy muncul galat memuat chunk, refresh halaman.
 
+Platform ini hanya menjalankan build command, bukan `setup:*`. Agar OCR ikut, pakai build command `npm run setup:ocr && npm run build` — asetnya disalin dari `node_modules` dan tiap berkasnya di bawah 4 MB.
+
 **Batasan keras:** platform Pages menolak berkas statis > 25 MB, sedangkan aset Office 237 MB. Hapus dulu sebelum build:
 
 ```bash
@@ -200,7 +205,8 @@ Hasilnya semua tool jalan **kecuali Office ke PDF**. Memunculkannya kembali butu
 
 | Fitur | Syarat |
 | --- | --- |
-| 20 tool PDF/gambar | Hosting statis biasa — tanpa syarat khusus |
+| 23 tool PDF/gambar (termasuk Sensor, Bersihkan, Kompres, Halaman per lembar) | Hosting statis biasa — tanpa syarat khusus |
+| OCR PDF hasil scan | Aset `public/tesseract/` ter-host (`npm run setup:ocr`); tanpa header khusus |
 | Hapus latar (AI) | Aset model ter-host; Cache API butuh konteks aman (tanpa itu model terunduh ulang tiap sesi, tetap jalan) |
 | Office ke PDF | Aset WASM ter-host + **konteks aman (HTTPS/localhost) + header COOP/COEP** + browser modern (Chrome/Edge/Firefox terbaru). Webview/pratinjau tersemat tidak didukung — aplikasi menolak dengan pesan jelas, bukan menggantung |
 
@@ -216,6 +222,8 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
   https://domain-anda.com/wasm/office/soffice.wasm                       # 200 application/wasm
 curl -s -o /dev/null -w '%{http_code}\n' \
   https://domain-anda.com/assets/tidak-ada.js                            # 404 (bukan 200)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://domain-anda.com/tesseract/worker.min.js                        # 200 bila OCR dipasang
 curl -s https://domain-anda.com/ | grep -c googleapis                    # harus 0
 ```
 
@@ -277,6 +285,11 @@ Laporan audit keamanan: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) (snapshot pada 
 - **Aset `.ts` disajikan sebagai `video/mp2t`**: pemetaan bawaan nginx — yang salah adalah `.ts` mentah ikut ke `dist/`; `scripts/check-dist.mjs` yang mencegahnya.
 - **File ditolak**: file rusak atau ekstensi tidak cocok sengaja ditolak (magic bytes diverifikasi). Penolakan juga terjadi bila melewati batas sesi (50 MB per file, 10 file, total 120 MB).
 - **Office ke PDF menolak file Excel**: pastikan ekstensinya `.xls`/`.xlsx` — file tanpa ekstensi dan tanpa tipe MIME dari browser tidak bisa dikenali.
+- **OCR: "Mesin OCR gagal dimuat"**: aset `public/tesseract/` belum ada di server — jalankan `npm run setup:ocr` lalu build ulang. Hasil kurang akurat biasanya karena scan buram, miring, atau beresolusi rendah; OCR hanya mengenali bahasa Indonesia dan Inggris.
+- **OCR melewati halaman**: halaman yang sudah berisi ≥100 karakter teks dianggap sudah punya lapisan teks dan tidak di-OCR, agar teks tidak dobel.
+- **Anotasi berbeda di hasil Kompres (Sedang/Kuat), PDF ke gambar, atau Sensor**: halaman dirender mengikuti tampilan cetak — anotasi tanpa flag Print tidak ikut, anotasi khusus cetak ikut. Ini disengaja agar render tetap berjalan saat tab tidak aktif; pratinjau Sensor memakai tampilan yang sama.
+- **Kompres Sedang/Kuat tidak mengunduh apa pun**: hasilnya lebih besar dari file asli (PDF berisi teks/vektor), jadi tidak diunduh — pakai tingkat Ringan.
+- **Hasil Sensor tanpa tautan, komentar, atau bookmark**: disengaja — rantai anotasi bisa membawa data dari halaman yang disensor.
 - **PDF ke gambar: "halaman terlalu besar"**: canvas melewati batas browser pada resolusi tinggi. Pilih resolusi Standar (1x) atau Tinggi (2x).
 - **Drag tidak jalan di HP**: tahan kartu ±0,25 detik sampai terlihat "terangkat", baru seret.
 - **Isi formulir kosong**: PDF bukan AcroForm (tidak punya field). Gunakan tanda tangan untuk mengisi manual, atau flatten untuk mengunci anotasi.
