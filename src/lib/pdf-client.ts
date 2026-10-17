@@ -54,7 +54,10 @@ export async function pdfToImages(
     canvas.height = viewport.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context tidak tersedia di browser ini.');
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    // intent 'print' tidak memakai requestAnimationFrame, yang berhenti di tab latar belakang.
+    // Konsekuensinya tampilan mengikuti versi cetak: anotasi tanpa flag Print tidak ikut,
+    // anotasi khusus cetak (NoView+Print) ikut. Pratinjau Sensor PDF memakai intent yang sama.
+    await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
     if (opts.draw) { ctx.setTransform(scale, 0, 0, scale, 0, 0); opts.draw(ctx, pageNum - 1); }
     // toBlob memberi null bila canvas melebihi batas browser (mis. halaman besar pada 3x).
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format}`, quality));

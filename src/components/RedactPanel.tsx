@@ -59,7 +59,9 @@ export function RedactPanel({ bytes, onProcess, busy }: RedactPanelProps) {
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
         setPageSize({ width: viewport.width, height: viewport.height });
-        const task = page.render({ canvasContext: ctx, viewport });
+        // Intent sama dengan render hasil (pdfToImages): anotasi khusus cetak harus terlihat di sini
+        // agar bisa ikut disensor — kalau tidak, ia lolos ke gambar hasil tanpa pernah terlihat.
+        const task = page.render({ canvasContext: ctx, viewport, intent: 'print' });
         taskRef.current = task;
         await task.promise;
         page.cleanup();
