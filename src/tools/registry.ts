@@ -18,6 +18,7 @@ export const tools: Tool[] = [
   { id: 'unlock', label: 'Hapus proteksi', description: 'Buka PDF yang terkunci atau terenkripsi, dengan password atau hapus restriction.', accept: PDF },
   { id: 'protect', label: 'Beri password', description: 'Enkripsi PDF dengan password (AES-256) agar hanya bisa dibuka oleh pemegang password.', accept: PDF },
   { id: 'metadata', label: 'Edit metadata', description: 'Ubah judul, penulis, subjek, dan kata kunci PDF.', accept: PDF },
+  { id: 'edit-text', label: 'Edit teks PDF', description: 'Ubah atau tambah teks langsung di PDF. Teks lama dihapus dari isi file, bukan sekadar ditutup.', accept: PDF },
   { id: 'redact', label: 'Sensor PDF', description: 'Tutup permanen data sensitif (NIK, nomor rekening, alamat) dengan kotak hitam. Teks di bawahnya benar-benar dihapus.', accept: PDF },
   { id: 'sanitize', label: 'Bersihkan PDF', description: 'Hapus data tersembunyi sebelum berbagi: info penulis, metadata, lampiran, JavaScript, dan riwayat revisi.', accept: PDF },
   { id: 'pdf-to-image', label: 'PDF ke gambar', description: 'Konversi setiap halaman PDF menjadi PNG atau JPEG.', accept: PDF },

@@ -3,11 +3,12 @@ import {
   deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf, redactPdf, nUpPdf, type NupLayout,
 } from '../engines/pdf-native';
 import { officeToPdf } from '../engines/office-native';
+import { editText, type TextEdit } from '../engines/edit-text';
 import { isJobRequest, errorEvent } from './protocol';
 import { validateMagicBytes } from '../lib/validation';
 import type { SplitMode } from './types';
 
-const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'sanitize', 'n-up']);
+const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'sanitize', 'n-up', 'edit-text']);
 
 self.onmessage = async (e: MessageEvent) => {
   const req = e.data;
@@ -128,6 +129,16 @@ self.onmessage = async (e: MessageEvent) => {
       const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
       outputs = [await nUpPdf(req.inputs[0], layout)];
       outputNames = [`${baseName}-${layout === 'booklet' ? 'buklet' : `${layout}-per-lembar`}.pdf`];
+    } else if (req.operation === 'edit-text') {
+      const isNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+      const edits = (Array.isArray(req.options?.edits) ? req.options.edits : []) as TextEdit[];
+      if (!edits.length) throw new Error('Tidak ada perubahan teks.');
+      if (!edits.every((e) => typeof e?.text === 'string' && [e.page, e.x, e.y, e.size, e.rotation].every(isNum) && (e.rect === undefined || (Array.isArray(e.rect) && e.rect.length === 4 && e.rect.every(isNum))))) {
+        throw new Error('Data perubahan teks tidak valid.');
+      }
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await editText(req.inputs[0], edits)];
+      outputNames = [`${baseName}-diedit.pdf`];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

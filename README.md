@@ -1,10 +1,10 @@
 # PrivaPDF
 
-Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 26 tool: PDF (gabung/split/rotate/…), kompres, sensor dan bersihkan data tersembunyi, OCR PDF hasil scan, formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
+Tools PDF yang **100% diproses lokal di browser** (React + Vite + WASM) — tanpa akun, tanpa upload, tanpa telemetry. File tidak pernah meninggalkan perangkat pengguna. Tersedia 27 tool: PDF (gabung/split/rotate/…), edit teks, kompres, sensor dan bersihkan data tersembunyi, OCR PDF hasil scan, formulir, tanda tangan, toolkit gambar, tanda air gambar, hapus latar, Office ke PDF.
 
 Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" memakai `@imgly/background-removal` yang berlisensi AGPL-3.0; model AI lain (U²-Net/ISNet via rembg) berlisensi Apache-2.0. OCR memakai `tesseract.js` (Apache-2.0) dengan data bahasa dari paket `@tesseract.js-data` (MIT).
 
-## Daftar Tool (26)
+## Daftar Tool (27)
 
 | Tool | Fungsi |
 | --- | --- |
@@ -21,6 +21,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Hapus proteksi | Buka PDF terenkripsi (user/owner password) via qpdf |
 | Beri password | Enkripsi AES-256, dengan password pemilik opsional |
 | Edit metadata | Judul, penulis, subjek, kata kunci, pembuat |
+| Edit teks PDF | Ubah baris teks atau tambah teks baru. Operator teks asli dibuang dari content stream (diganti TJ kosong selebar aslinya agar teks lain tidak bergeser), teks baru memakai font/ukuran/warna/sudut asli — termasuk tebal/miring dari nama font, FontDescriptor, maupun bold sintetis (render mode stroke) — file ditulis ulang qpdf, lalu hasil diverifikasi pdf.js. Ada mode layar penuh untuk menyunting |
 | Sensor PDF | Gambar kotak hitam per halaman; halaman tersensor dirender jadi gambar 144 dpi, halaman lain tetap teks. Hasil dibangun ulang tanpa anotasi/bookmark/metadata, resource bersama dipangkas via qpdf |
 | Bersihkan PDF | Buang info dokumen, XMP, PieceInfo, lampiran, JavaScript & aksi otomatis, serta revisi lama (ditulis ulang via qpdf); isi, tautan, formulir, bookmark tetap |
 | Isi formulir | Isi field AcroForm (teks, checkbox, dropdown) + pratinjau |
@@ -205,7 +206,7 @@ Hasilnya semua tool jalan **kecuali Office ke PDF**. Memunculkannya kembali butu
 
 | Fitur | Syarat |
 | --- | --- |
-| 23 tool PDF/gambar (termasuk Sensor, Bersihkan, Kompres, Halaman per lembar) | Hosting statis biasa — tanpa syarat khusus |
+| 24 tool PDF/gambar (termasuk Edit teks, Sensor, Bersihkan, Kompres, Halaman per lembar) | Hosting statis biasa — tanpa syarat khusus |
 | OCR PDF hasil scan | Aset `public/tesseract/` ter-host (`npm run setup:ocr`); tanpa header khusus |
 | Hapus latar (AI) | Aset model ter-host; Cache API butuh konteks aman (tanpa itu model terunduh ulang tiap sesi, tetap jalan) |
 | Office ke PDF | Aset WASM ter-host + **konteks aman (HTTPS/localhost) + header COOP/COEP** + browser modern (Chrome/Edge/Firefox terbaru). Webview/pratinjau tersemat tidak didukung — aplikasi menolak dengan pesan jelas, bukan menggantung |
@@ -289,6 +290,8 @@ Laporan audit keamanan: [SECURITY-AUDIT.md](./SECURITY-AUDIT.md) (snapshot pada 
 - **OCR melewati halaman**: halaman yang sudah berisi ≥100 karakter teks dianggap sudah punya lapisan teks dan tidak di-OCR, agar teks tidak dobel.
 - **Anotasi berbeda di hasil Kompres (Sedang/Kuat), PDF ke gambar, atau Sensor**: halaman dirender mengikuti tampilan cetak — anotasi tanpa flag Print tidak ikut, anotasi khusus cetak ikut. Ini disengaja agar render tetap berjalan saat tab tidak aktif; pratinjau Sensor memakai tampilan yang sama.
 - **Kompres Sedang/Kuat tidak mengunduh apa pun**: hasilnya lebih besar dari file asli (PDF berisi teks/vektor), jadi tidak diunduh — pakai tingkat Ringan.
+- **Edit teks: hurufnya berganti jadi Helvetica/Times/Courier**: font di PDF biasanya subset yang hanya memuat huruf teks aslinya. Bila teks baru butuh huruf lain, dipakai font standar bergaya sama (sans/serif/mono, tebal/miring — dibaca dari nama font, `/FontWeight`, dan flag `ForceBold`/`Italic`); karakter di luar WinAnsi ditulis `?`.
+- **Edit teks: "teks lama masih terbaca" atau "teks lain ikut berubah"**: hasil diperiksa ulang dengan pdf.js setelah disimpan. Penyebab umumnya teks di dalam Form XObject (mis. hasil Halaman per lembar) atau satu operator teks yang membentang ke luar baris. Untuk data sensitif pakai Sensor PDF.
 - **Hasil Sensor tanpa tautan, komentar, atau bookmark**: disengaja — rantai anotasi bisa membawa data dari halaman yang disensor.
 - **PDF ke gambar: "halaman terlalu besar"**: canvas melewati batas browser pada resolusi tinggi. Pilih resolusi Standar (1x) atau Tinggi (2x).
 - **Drag tidak jalan di HP**: tahan kartu ±0,25 detik sampai terlihat "terangkat", baru seret.

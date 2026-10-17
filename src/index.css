@@ -1854,3 +1854,109 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 .redact-remove:hover { background: var(--accent-hover); }
 .redact-remove:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ===== Edit teks ===== */
+/* Layer = container query: ukuran huruf baris (cqw) mengikuti lebar tampil halaman. */
+.edit-layer {
+  position: absolute;
+  inset: 0;
+  container-type: inline-size;
+}
+.edit-layer.is-adding { cursor: crosshair; }
+.edit-layer.is-adding .edit-line { pointer-events: none; }
+.edit-line {
+  position: absolute;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #111;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1;
+  text-align: left;
+  white-space: pre;
+  cursor: text;
+  /* Font asli yang sudah tebal tidak boleh ditebalkan lagi oleh browser. */
+  font-synthesis: none;
+}
+.edit-line:hover,
+.edit-line:focus-visible {
+  background: rgba(217, 46, 41, 0.12);
+  outline: 1px solid var(--accent);
+}
+.edit-line.is-edited {
+  background: #fff;
+  outline: 1px dashed var(--accent);
+}
+.edit-line.is-new { background: transparent; }
+/* Area sentuh lebih tinggi dari baris yang tampil — di ponsel baris 14 pt hanya ±8 px. */
+.edit-line::after {
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
+.edit-input {
+  position: absolute;
+  z-index: 3;
+  padding: 0 2px;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  background: #fff;
+  color: #111;
+  font-family: Helvetica, Arial, sans-serif;
+  line-height: 1.2;
+  resize: none;
+  overflow: hidden;
+  font-synthesis: none;
+}
+.edit-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.edit-toolbar { align-items: center; justify-content: center; }
+.edit-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.edit-stage { display: flex; justify-content: center; max-width: 100%; }
+/* Layar penuh: stage yang sama, hanya pembungkusnya jadi overlay — canvas tidak dirender ulang. */
+.edit-fullview {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 8px;
+  background: rgba(20, 22, 28, 0.94);
+}
+.edit-fullview .edit-toolbar { margin-top: 0; }
+.edit-fullview .edit-page-nav,
+.edit-fullview .annotate-caption { color: #fff; }
+.edit-fullview .annotate-caption { margin: 0; }
+.edit-fullview .edit-stage {
+  flex: 1;
+  min-height: 0;
+  /* Teks pratinjau yang lebih panjang dari barisnya boleh meluap, tapi tanpa scrollbar mendatar. */
+  overflow: hidden auto;
+  align-items: flex-start;
+  padding-bottom: 8px;
+}
+.edit-fullview .redact-wrap { width: min(1000px, 100%); flex-shrink: 0; }
+.edit-fullview .redact-wrap canvas { width: 100%; max-height: none; }
+.edit-save { display: inline-block; width: auto; margin: 0; padding: 8px 16px; font-size: 13px; }
+
+@media (max-width: 600px) {
+  /* Di layar sempit huruf baris terlalu kecil untuk diketik: editor selebar halaman, 16 px
+     (di bawah itu iOS memperbesar tampilan saat input difokuskan). */
+  .edit-input {
+    left: 0 !important;
+    width: 100% !important;
+    font-size: 16px !important;
+  }
+}

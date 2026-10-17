@@ -808,10 +808,17 @@ export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
     }
   }
 
-  // pdf-lib tetap menulis objek yatim (info, lampiran, skrip yang referensinya sudah dilepas).
-  // qpdf hanya menulis objek yang masih terjangkau — sisa itu dan revisi lama ikut terbuang.
+  return rewriteReachable(await doc.save());
+}
+
+/**
+ * pdf-lib tetap menulis objek yatim (yang referensinya sudah dilepas). qpdf hanya menulis objek
+ * yang masih terjangkau, jadi sisa itu — dan revisi lama — ikut terbuang. Hanya jalan di worker:
+ * CSP halaman memblokir kompilasi WASM.
+ */
+export async function rewriteReachable(bytes: Uint8Array): Promise<ArrayBuffer> {
   const toolkit = await getUnlockToolkit();
-  return toArrayBuffer(await toolkit.raw([await doc.save()], ['$in0', '--object-streams=generate', '$out']));
+  return toArrayBuffer(await toolkit.raw([bytes], ['$in0', '--object-streams=generate', '$out']));
 }
 
 export type NupLayout = '2' | '4' | 'booklet';

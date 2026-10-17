@@ -23,6 +23,9 @@ import { FormFillPanel } from '../components/FormFillPanel';
 import { ImageToolkitPanel, type ImageOutput } from '../components/ImageToolkitPanel';
 import { RemoveBgPanel } from '../components/RemoveBgPanel';
 import { RedactPanel, type Redactions } from '../components/RedactPanel';
+import { EditTextPanel } from '../components/EditTextPanel';
+import type { TextEdit } from '../engines/edit-text';
+import { verifyTextEdits } from '../lib/edit-verify';
 import { preloadOfficeConverter } from '../engines/office-native';
 
 const STALL_AFTER_MS = 20000;
@@ -345,6 +348,20 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
+  const handleEditText = async (edits: TextEdit[]) => {
+    setBusy(true); setPhase(undefined); setStatus('Menyunting teks…');
+    try {
+      let names: string[] | undefined;
+      const [out] = await runJob({ jobId: uid(), operation: 'edit-text', inputs: [files[0].bytes], options: { edits, filename: files[0].name } }, (event) => { names = event.outputNames ?? names; });
+      setStatus('Memeriksa hasil…');
+      // Diperiksa dari apa yang benar-benar bisa diekstrak pdf.js, bukan dari asumsi engine.
+      const problems = await verifyTextEdits(files[0].bytes, out, edits);
+      downloadBlobs([new Blob([out])], [names?.[0] ?? `${files[0].name.replace(/\.pdf$/i, '')}-diedit.pdf`], 'application/pdf');
+      setStatus(problems.length ? `PDF diunduh, tapi perlu dicek. ${problems.join(' ')}` : `Selesai. ${edits.length} perubahan diterapkan; teks lama sudah tidak ada di file.`);
+    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal menyunting teks.'); }
+    setBusy(false);
+  };
+
   const handleFlatten = () => runWorker('flatten', [files[0].bytes], { filename: files[0]?.name });
 
   const handleImageToolkit = async (items: ImageOutput[]) => {
@@ -432,6 +449,10 @@ export function ToolWorkspace() {
       <ToolOptionsForm fields={COMPRESS_FIELDS} onProcess={handleCompress} busy={busy} submitLabel="Kompres PDF →">
         <p className="split-hint">Ringan hampir tidak mengecilkan PDF hasil scan atau yang penuh foto. Untuk itu pilih Sedang atau Kuat, tapi teks di hasilnya tidak bisa dipilih atau dicari lagi.</p>
       </ToolOptionsForm>
+    )}
+
+    {files.length > 0 && toolId === 'edit-text' && (
+      <EditTextPanel bytes={files[0].bytes} onProcess={handleEditText} busy={busy} />
     )}
 
     {files.length > 0 && toolId === 'redact' && (
