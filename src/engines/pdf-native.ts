@@ -1,4 +1,4 @@
-import { PDFDocument, degrees, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, type PDFObject, degrees, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
 
@@ -610,7 +610,7 @@ export async function unlockPdf(input: ArrayBuffer, password?: string): Promise<
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteLength) as ArrayBuffer;
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 /** Opsi enkripsi PDF. */
@@ -736,6 +736,50 @@ export async function flattenForm(input: ArrayBuffer): Promise<ArrayBuffer> {
   const toolkit = await getUnlockToolkit();
   const out = await toolkit.flatten(input, { annotations: 'all' });
   return toArrayBuffer(out);
+}
+
+const UNSAFE_ACTIONS = new Set(['JavaScript', 'Launch', 'SubmitForm', 'ImportData']);
+
+/**
+ * Buang data tersembunyi: info dokumen, XMP, data privat aplikasi (PieceInfo), lampiran,
+ * JavaScript, dan aksi otomatis. Isi halaman, tautan, formulir, dan bookmark tetap.
+ */
+export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
+  const doc = await PDFDocument.load(input, { updateMetadata: false });
+  const { context, catalog } = doc;
+  context.trailerInfo.Info = undefined;
+  catalog.delete(PDFName.of('OpenAction'));
+  const names = catalog.lookupMaybe(PDFName.of('Names'), PDFDict);
+  names?.delete(PDFName.of('JavaScript'));
+  names?.delete(PDFName.of('EmbeddedFiles'));
+
+  const isUnsafeAction = (v: PDFObject | undefined): boolean => {
+    const d = v instanceof PDFRef ? context.lookup(v) : v;
+    if (d instanceof PDFArray) return d.asArray().some(isUnsafeAction);
+    return d instanceof PDFDict && UNSAFE_ACTIONS.has(d.lookupMaybe(PDFName.of('S'), PDFName)?.decodeText() ?? '');
+  };
+  // Telusuri setiap objek beserta dict/array langsung di dalamnya (aksi sering ditulis inline).
+  const walk = (obj: PDFObject): void => {
+    if (obj instanceof PDFStream) return walk(obj.dict);
+    if (obj instanceof PDFArray) return obj.asArray().forEach(walk);
+    if (!(obj instanceof PDFDict)) return;
+    for (const key of ['AA', 'Metadata', 'PieceInfo', 'AF']) obj.delete(PDFName.of(key));
+    for (const key of ['A', 'Next']) if (isUnsafeAction(obj.get(PDFName.of(key)))) obj.delete(PDFName.of(key));
+    obj.entries().forEach(([, v]) => walk(v));
+  };
+  context.enumerateIndirectObjects().forEach(([, obj]) => walk(obj));
+
+  for (const page of doc.getPages()) {
+    const annots = page.node.Annots();
+    for (let i = (annots?.size() ?? 0) - 1; i >= 0; i--) {
+      if (annots!.lookupMaybe(i, PDFDict)?.get(PDFName.of('Subtype')) === PDFName.of('FileAttachment')) annots!.remove(i);
+    }
+  }
+
+  // pdf-lib tetap menulis objek yatim (info, lampiran, skrip yang referensinya sudah dilepas).
+  // qpdf hanya menulis objek yang masih terjangkau — sisa itu dan revisi lama ikut terbuang.
+  const toolkit = await getUnlockToolkit();
+  return toArrayBuffer(await toolkit.raw([await doc.save()], ['$in0', '--object-streams=generate', '$out']));
 }
 
 /**

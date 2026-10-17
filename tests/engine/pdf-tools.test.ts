@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PDFDocument, PDFPage, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFPage, PDFString, StandardFonts, rgb } from 'pdf-lib';
 import { createPdfToolkit } from 'pdfstudio';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   deletePages, reorderPages, addPageNumbers, addWatermark, drawTextBlockCentered, rotatePdf, watermarkCenters,
-  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf,
+  updateMetadata, cropPages, compressPdf, jpegsToPdf, unlockPdf, sanitizePdf,
 } from '../../src/engines/pdf-native';
 
 async function makePdf(pages: number): Promise<ArrayBuffer> {
@@ -473,3 +473,31 @@ describe('unlockPdf', () => {
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
+
+describe('sanitizePdf', () => {
+  it('drops hidden data and orphans but keeps links and forms', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 300]);
+    page.drawText('Isi', { x: 50, y: 250, size: 24 });
+    doc.setAuthor('RAHASIA-PENULIS');
+    doc.addJavaScript('buka', 'app.alert("RAHASIA-JS")');
+    await doc.attach(btoa('RAHASIA-LAMPIRAN'), 'rahasia.txt', { mimeType: 'text/plain' });
+    doc.getForm().createTextField('nama').addToPage(page, { x: 10, y: 10 });
+    const ctx = doc.context;
+    doc.catalog.set(PDFName.of('Metadata'), ctx.register(ctx.stream('<x:xmpmeta>RAHASIA-XMP</x:xmpmeta>', { Type: 'Metadata', Subtype: 'XML' })));
+    doc.catalog.set(PDFName.of('OpenAction'), ctx.obj({ S: 'JavaScript', JS: PDFString.of('RAHASIA-OPEN') }));
+    page.node.set(PDFName.of('AA'), ctx.obj({ O: { S: 'JavaScript', JS: PDFString.of('RAHASIA-AA') } }));
+    page.node.addAnnot(ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Link', Rect: [0, 0, 10, 10], A: { S: 'JavaScript', JS: PDFString.of('RAHASIA-LINK') } })));
+    page.node.addAnnot(ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Link', Rect: [0, 20, 10, 30], A: { S: 'URI', URI: PDFString.of('https://contoh.id') } })));
+    page.node.addAnnot(ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'FileAttachment', Rect: [0, 40, 10, 50] })));
+
+    const out = await PDFDocument.load(await sanitizePdf((await doc.save()).buffer as ArrayBuffer), { updateMetadata: false });
+    // pdf-lib mem-parse semua objek di file, termasuk yang yatim — jadi ini memeriksa isi file seutuhnya.
+    const dump = out.context.enumerateIndirectObjects().map(([, o]) => o.toString()).join('\n');
+    for (const leak of ['RAHASIA', '/JavaScript', '/EmbeddedFile', '/Metadata', '/AA', '/FileAttachment']) expect(dump).not.toContain(leak);
+    expect(out.getAuthor()).toBeUndefined();
+    expect(dump).toContain('https://contoh.id');
+    expect(out.getForm().getFields().map((f) => f.getName())).toEqual(['nama']);
+    expect(out.getPageCount()).toBe(1);
+  });
+});

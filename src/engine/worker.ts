@@ -1,13 +1,13 @@
 import {
   mergePdf, mergePages, splitPdfEach, splitPdfGroups, splitPdfRanges, rotatePdf, imageToPdf,
-  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm,
+  deletePages, reorderPages, addPageNumbers, addWatermark, updateMetadata, cropPages, compressPdf, unlockPdf, protectPdf, flattenForm, sanitizePdf,
 } from '../engines/pdf-native';
 import { officeToPdf } from '../engines/office-native';
 import { isJobRequest, errorEvent } from './protocol';
 import { validateMagicBytes } from '../lib/validation';
 import type { SplitMode } from './types';
 
-const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten']);
+const PDF_OPS = new Set(['merge', 'merge-pages', 'split', 'rotate', 'delete-pages', 'reorder-pages', 'page-numbers', 'watermark', 'metadata', 'crop', 'compress', 'unlock', 'protect', 'flatten', 'sanitize']);
 
 self.onmessage = async (e: MessageEvent) => {
   const req = e.data;
@@ -110,6 +110,10 @@ self.onmessage = async (e: MessageEvent) => {
       const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
       outputs = [await flattenForm(req.inputs[0])];
       outputNames = [`${baseName}-flat.pdf`];
+    } else if (req.operation === 'sanitize') {
+      const baseName = String(req.options?.filename || 'document').replace(/\.pdf$/i, '');
+      outputs = [await sanitizePdf(req.inputs[0])];
+      outputNames = [`${baseName}-bersih.pdf`];
     } else {
       throw new Error(`Operasi '${req.operation}' tidak didukung oleh worker.`);
     }

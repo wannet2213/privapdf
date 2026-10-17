@@ -64,7 +64,7 @@ const RASTER_LEVELS: Record<string, { scale: number; quality: number }> = {
 
 const formatSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toLocaleString('id-ID', { maximumFractionDigits: 1 })} MB`;
 
-const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf']);
+const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'sanitize']);
 
 const IS_TOUCH = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
@@ -466,7 +466,7 @@ export function ToolWorkspace() {
 
     {files.length > 0 && SIMPLE_BUTTON_TOOLS.has(toolId!) && (
       <button className="primary" onClick={() => {
-        const opts = toolId === 'image-to-pdf' ? { type: /\.jpe?g$/i.test(files[0]?.name ?? '') ? 'jpg' : 'png' } : toolId === 'office-to-pdf' ? { filename: files[0]?.name } : undefined;
+        const opts = toolId === 'image-to-pdf' ? { type: /\.jpe?g$/i.test(files[0]?.name ?? '') ? 'jpg' : 'png' } : toolId === 'office-to-pdf' || toolId === 'sanitize' ? { filename: files[0]?.name } : undefined;
         runWorker(toolId!, files.map((f) => f.bytes), opts);
       }} disabled={busy}>{busy ? 'Memproses…' : 'Jalankan proses →'}</button>
     )}
