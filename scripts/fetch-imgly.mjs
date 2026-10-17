@@ -21,10 +21,21 @@ mkdirSync(dest, { recursive: true });
 const VERSION = '1.7.0';
 const BASE = `https://staticimgly.com/@imgly/background-removal-data/${VERSION}/dist/`;
 
-async function download(url, file) {
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`HTTP ${res.status} untuk ${url}`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+// Satu koneksi yang timeout (ETIMEDOUT dari CDN) dulu menghentikan seluruh unduhan dan menyisakan
+// model setengah terpasang. Coba ulang dengan jeda bertahap; file setengah jadi ditimpa.
+async function download(url, file, attempts = 4) {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status} untuk ${url}`);
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+      return;
+    } catch (err) {
+      if (i >= attempts) throw err;
+      console.log(`unduhan terputus (${err.cause?.code ?? err.message}), coba lagi ${i}/${attempts - 1}…`);
+      await new Promise((resolve) => setTimeout(resolve, 2000 * i));
+    }
+  }
 }
 
 const manifestUrl = BASE + 'resources.json';

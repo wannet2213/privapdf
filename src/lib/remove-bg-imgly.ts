@@ -8,6 +8,19 @@ const TIMEOUT_MS = 10 * 60_000;
 
 export type ImglyModel = 'isnet' | 'isnet_fp16' | 'isnet_quint8';
 
+const MODEL_LABEL: Record<ImglyModel, string> = { isnet: 'Maksimal', isnet_fp16: 'Seimbang', isnet_quint8: 'Ringan' };
+
+// imgly tidak memeriksa status HTTP potongan model: aset yang belum terpasang muncul sebagai ukuran
+// tak cocok (server menjawab halaman HTML/404, mis. "with size 4194304 but got 948") atau "not found".
+const MISSING_ASSET = /Failed to fetch .* with size|Resource( metadata)? .*not found/;
+
+/** Pesan galat imgly → kalimat yang bisa ditindaklanjuti pengguna. */
+export function imglyErrorMessage(error: string, model: ImglyModel): string {
+  return MISSING_ASSET.test(error)
+    ? `Model "${MODEL_LABEL[model]}" belum terpasang lengkap di server ini (npm run setup:imgly). Pilih kualitas model lain atau pasang asetnya.`
+    : error;
+}
+
 /** Hapus latar dengan imgly ISNet. Buffer input tidak diubah (disalin internal). */
 export async function removeBackgroundImgly(
   input: ArrayBuffer,
@@ -35,7 +48,7 @@ export async function removeBackgroundImgly(
         worker.terminate();
         resolve(m.blob);
       } else if (m.type === 'error') {
-        fail(m.error || 'Konversi gagal.');
+        fail(imglyErrorMessage(m.error || 'Konversi gagal.', model));
       }
     };
     worker.onerror = () => fail('Komponen AI gagal dimuat. Fitur ini mungkin belum aktif di situs ini.');

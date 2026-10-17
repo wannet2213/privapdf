@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { applyKey, cornerColor } from '../lib/remove-bg';
+import { applyKey, cornerColor, flattenOnColor } from '../lib/remove-bg';
 import { removeBackgroundAI, type BgModelQuality } from '../lib/remove-bg-ai';
 import { removeBackgroundImgly, type ImglyModel } from '../lib/remove-bg-imgly';
 
 interface RemoveBgPanelProps {
   bytes: ArrayBuffer;
-  onProcess: (blob: Blob) => void;
+  /** `background` = warna latar hasil (#rrggbb), atau null bila transparan. */
+  onProcess: (blob: Blob, background: string | null) => void;
   busy: boolean;
 }
+
+// Merah/biru: kebutuhan umum pas foto; warna lain lewat pemilih warna.
+const BG_PRESETS: { label: string; value: string | null }[] = [
+  { label: 'Transparan', value: null },
+  { label: 'Putih', value: '#ffffff' },
+  { label: 'Merah', value: '#db1f26' },
+  { label: 'Biru', value: '#1d4fa3' },
+];
 
 const rgbHex = (c: [number, number, number]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
 const hexRgb = (hex: string): [number, number, number] => [
@@ -34,6 +43,7 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
   const [statusText, setStatusText] = useState('');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
+  const [background, setBackground] = useState<string | null>(null);
 
   // ---- Mode warna solid (ringan, instan) ----
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -90,15 +100,33 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
     return () => clearTimeout(timer);
   }, [mode, solidReady, refColor, tolerance, softness, keyMode]);
 
+  /** Kirim hasil: apa adanya bila transparan, atau diratakan ke warna latar terpilih. */
+  const finish = async (blob: Blob) => {
+    if (!background) { onProcess(blob, null); return; }
+    try {
+      const bitmap = await createImageBitmap(blob);
+      const off = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = off.getContext('2d')!;
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const image = ctx.getImageData(0, 0, off.width, off.height);
+      flattenOnColor(image.data, hexRgb(background));
+      ctx.putImageData(image, 0, 0);
+      onProcess(await off.convertToBlob({ type: 'image/png' }), background);
+    } catch {
+      setError('Gagal menerapkan warna latar.');
+    }
+  };
+
   const downloadSolid = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.toBlob((blob) => {
       if (!blob) {
-        setError('Gagal mengenalikan PNG.');
+        setError('Gagal membuat PNG.');
         return;
       }
-      onProcess(blob);
+      void finish(blob);
     }, 'image/png');
   };
 
@@ -147,9 +175,29 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
   };
 
   const downloadAi = () => {
-    if (!resultBlob) return;
-    onProcess(resultBlob);
+    if (resultBlob) void finish(resultBlob);
   };
+
+  // Pratinjau: warna latar CSS di belakang gambar transparan — tanpa memproses ulang piksel.
+  const previewBg = background ? { backgroundColor: background } : undefined;
+  const downloadLabel = background ? 'Unduh PNG berlatar warna →' : 'Unduh PNG transparan →';
+  const backgroundPicker = (
+    <fieldset className="tool-form-field removebg-bg">
+      <legend className="tool-form-label">Latar hasil</legend>
+      <div className="removebg-color-row">
+        {BG_PRESETS.map((p) => (
+          <button key={p.label} type="button" className={`ghost-btn ${background === p.value ? 'is-active' : ''}`} aria-pressed={background === p.value} disabled={busy} onClick={() => setBackground(p.value)}>
+            {p.value && <span className="removebg-swatch" style={{ background: p.value }} aria-hidden="true" />}
+            {p.label}
+          </button>
+        ))}
+        <label className="removebg-custom">
+          <input type="color" value={background ?? '#ffffff'} disabled={busy} onChange={(e) => setBackground(e.target.value)} aria-label="Warna latar lain" />
+          Warna lain
+        </label>
+      </div>
+    </fieldset>
+  );
 
   if (error) return <div className="preview-error" role="alert">{error}</div>;
 
@@ -184,10 +232,11 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
           {resultUrl ? (
             <>
               <div className="removebg-stage">
-                <img src={resultUrl} alt="Hasil hapus latar" className="removebg-canvas" />
+                <img src={resultUrl} alt="Hasil hapus latar" className="removebg-canvas" style={previewBg} />
               </div>
+              <div className="tool-form">{backgroundPicker}</div>
               <button className="primary" onClick={downloadAi} disabled={busy || aiBusy}>
-                Unduh PNG transparan →
+                {downloadLabel}
               </button>
               <button className="ghost-btn" onClick={() => { setResultUrl(null); setResultBlob(null); }} disabled={aiBusy}>Proses ulang</button>
             </>
@@ -205,11 +254,11 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
       ) : (
         <>
           <div className="removebg-stage">
-            <canvas ref={canvasRef} className="removebg-canvas" style={{ visibility: solidReady ? 'visible' : 'hidden' }} />
+            <canvas ref={canvasRef} className="removebg-canvas" style={{ visibility: solidReady ? 'visible' : 'hidden', ...previewBg }} />
           </div>
           <div className="tool-form">
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="rb-color">Warna latar</label>
+              <label className="tool-form-label" htmlFor="rb-color">Warna latar asli yang dihapus</label>
               <div className="removebg-color-row">
                 <input id="rb-color" type="color" value={refColor} disabled={busy} onChange={(e) => setRefColor(e.target.value)} />
                 <button type="button" className="ghost-btn" disabled={busy} onClick={() => {
@@ -233,9 +282,10 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
                 <option value="global">Semua piksel serupa</option>
               </select>
             </div>
+            {backgroundPicker}
           </div>
           <button className="primary" onClick={downloadSolid} disabled={busy || !solidReady}>
-            {busy ? 'Memproses…' : 'Unduh PNG transparan →'}
+            {busy ? 'Memproses…' : downloadLabel}
           </button>
         </>
       )}

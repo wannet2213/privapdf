@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyKey, alphaFor, colorDistance, cornerColor } from '../../src/lib/remove-bg';
+import { applyKey, alphaFor, colorDistance, cornerColor, flattenOnColor } from '../../src/lib/remove-bg';
+import { imglyErrorMessage } from '../../src/lib/remove-bg-imgly';
 
 const REF: [number, number, number] = [255, 255, 255];
 
@@ -75,5 +76,22 @@ describe('applyKey', () => {
     const mid = alphaAt(data, 4, 0);
     expect(mid).toBeGreaterThan(0);
     expect(mid).toBeLessThan(255);
+  });
+});
+
+describe('flattenOnColor', () => {
+  it('composites each pixel over the background by its alpha and makes it opaque', () => {
+    // transparan penuh, opak penuh, dan tepi setengah transparan
+    const data = new Uint8ClampedArray([0, 0, 0, 0, 10, 20, 30, 255, 200, 100, 0, 128]);
+    flattenOnColor(data, [255, 0, 0]);
+    expect([...data]).toEqual([255, 0, 0, 255, 10, 20, 30, 255, 227, 50, 0, 255]);
+  });
+});
+
+describe('imglyErrorMessage', () => {
+  it('explains missing model assets instead of the raw size mismatch', () => {
+    expect(imglyErrorMessage('Failed to fetch /models/isnet with size 4194304 but got 948', 'isnet')).toMatch(/"Maksimal" belum terpasang lengkap.*setup:imgly/);
+    expect(imglyErrorMessage('Resource /models/isnet_fp16 not found. Ensure that the config.publicPath is configured correctly.', 'isnet_fp16')).toMatch(/"Seimbang"/);
+    expect(imglyErrorMessage('out of memory', 'isnet')).toBe('out of memory');
   });
 });

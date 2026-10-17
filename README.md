@@ -33,7 +33,7 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Gambar ke PDF | PNG/JPEG → PDF |
 | Toolkit gambar | Kompres, resize massal, konversi PNG/JPEG/WebP; re-encode menghapus EXIF |
 | Tanda air gambar | Teks atau logo di foto PNG/JPEG/WebP, banyak sekaligus (ZIP); opsi sama dengan tanda air PDF |
-| Hapus latar | AI 4 varian — u2netp, ISNet quint8/fp16/fp32, semuanya lokal di browser — atau mode warna solid → PNG transparan |
+| Hapus latar | AI 4 varian — u2netp, ISNet quint8/fp16/fp32, semuanya lokal di browser — atau mode warna solid → PNG transparan; latar hasil bisa tetap transparan atau diganti warna (putih/merah/biru untuk pas foto, atau warna bebas) |
 | Office ke PDF | DOCX/DOC, XLSX/XLS, PPTX/PPT, ODT/ODS/ODP, RTF, CSV, HTML (butuh aset engine ±237 MB — lihat Opsional 1) |
 
 Batas per sesi: **50 MB per file, maksimal 10 file, total 120 MB** (termasuk file yang ditambahkan belakangan di Gabungkan PDF). Alat satu-file hanya memakai file pertama bila beberapa file dijatuhkan sekaligus; file berformat lain diabaikan.

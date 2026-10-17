@@ -112,3 +112,17 @@ export function applyKey(data: Uint8ClampedArray, width: number, height: number,
     }
   }
 }
+
+/**
+ * Ratakan hasil transparan ke warna latar (alpha compositing "over"): tiap piksel dicampur
+ * dengan latar sesuai alpha-nya, lalu dibuat opak. Data dari getImageData tidak premultiplied.
+ */
+export function flattenOnColor(data: Uint8ClampedArray, bg: [number, number, number]): void {
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3] / 255;
+    data[i] = Math.round(data[i] * a + bg[0] * (1 - a));
+    data[i + 1] = Math.round(data[i + 1] * a + bg[1] * (1 - a));
+    data[i + 2] = Math.round(data[i + 2] * a + bg[2] * (1 - a));
+    data[i + 3] = 255;
+  }
+}

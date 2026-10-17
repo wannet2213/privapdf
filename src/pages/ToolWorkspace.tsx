@@ -381,9 +381,9 @@ export function ToolWorkspace() {
     setBusy(false);
   };
 
-  const handleRemoveBg = (blob: Blob) => {
-    downloadBlobs([blob], [`${files[0].name.replace(/\.[^.]+$/, '')}-transparan.png`], 'image/png');
-    setStatus('Selesai. PNG transparan telah diunduh.');
+  const handleRemoveBg = (blob: Blob, background: string | null) => {
+    downloadBlobs([blob], [`${files[0].name.replace(/\.[^.]+$/, '')}-${background ? 'latar' : 'transparan'}.png`], 'image/png');
+    setStatus(background ? `Selesai. PNG berlatar ${background} telah diunduh.` : 'Selesai. PNG transparan telah diunduh.');
   };
 
   const handleUnlock = () => runWorker('unlock', [files[0].bytes], unlockPassword.trim() ? { password: unlockPassword } : undefined);
