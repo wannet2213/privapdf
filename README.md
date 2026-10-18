@@ -20,12 +20,12 @@ Lisensi: **AGPL-3.0-or-later** (code) — dipakai karena tool "Hapus latar" mema
 | Kompres PDF | Ringan: object streams + bersih-bersih metadata. Sedang/Kuat: render ulang halaman jadi JPEG (144/108 dpi), hasil tidak diunduh bila malah lebih besar |
 | Hapus proteksi | Buka PDF terenkripsi (user/owner password) via qpdf |
 | Beri password | Enkripsi AES-256, dengan password pemilik opsional |
-| Edit metadata | Judul, penulis, subjek, kata kunci, pembuat |
+| Edit metadata | Judul, penulis, subjek, kata kunci, pembuat — XMP ditulis ulang dari nilai baru (identitas PDF/A dipertahankan) dan info revisi lama ikut dibuang |
 | Edit teks PDF | Ubah baris teks atau tambah teks baru. Operator teks asli dibuang dari content stream (diganti TJ kosong selebar aslinya agar teks lain tidak bergeser), teks baru memakai font/ukuran/warna/sudut asli — termasuk tebal/miring dari nama font, FontDescriptor, maupun bold sintetis (render mode stroke) — teks pengganti marked content (/ActualText, /Alt, /E) dan elemen strukturnya ikut dibersihkan, file ditulis ulang qpdf, lalu hasil diverifikasi pdf.js. Baris yang hanya teks OCR tak terlihat di atas scan ditolak (gambarnya tidak bisa diedit — pakai Sensor PDF). Ada mode layar penuh untuk menyunting |
 | Sensor PDF | Gambar kotak hitam per halaman; halaman tersensor dirender jadi gambar 144 dpi, halaman lain tetap teks. Hasil dibangun ulang tanpa anotasi/bookmark/metadata, resource bersama dipangkas via qpdf |
 | Bersihkan PDF | Buang info dokumen, XMP, PieceInfo, lampiran & berkas tertanam (juga yang masih dirujuk komentar/struktur), paket XFA, JavaScript (termasuk Rendition, 3D, RichMedia) & aksi otomatis, serta revisi lama (ditulis ulang via qpdf); isi, tautan, formulir, bookmark tetap. Formulir XFA dinamis ditolak karena isinya hanya ada di XFA |
 | Isi formulir | Isi field AcroForm (teks, checkbox, dropdown) + pratinjau |
-| Ratakan (flatten) | Kunci formulir/anotasi jadi konten statis |
+| Ratakan (flatten) | Kunci formulir/anotasi jadi konten statis; anotasi tanpa tampilan yang tidak bisa diratakan dibuang (tautan tetap). PDF terkunci harus dibuka dulu |
 | PDF ke gambar | PNG/JPEG per halaman — terpisah atau satu ZIP |
 | OCR PDF hasil scan | tesseract.js (Indonesia + Inggris) → lapisan teks tak terlihat sehingga PDF bisa dicari/disalin, atau unduh .txt; halaman yang sudah berisi teks dilewati (butuh aset ±16 MB — lihat Opsional 3) |
 | Ekstrak teks | Semua teks ke file .txt |

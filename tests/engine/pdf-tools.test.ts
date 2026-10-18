@@ -339,6 +339,30 @@ describe('updateMetadata', () => {
     expect(doc.getKeywords()).toContain('beta');
     expect(doc.getKeywords()).toContain('gamma');
   });
+
+  it('rewrites XMP to the new values and drops older Info revisions, keeping the PDF/A identity', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([200, 300]);
+    const ctx = doc.context;
+    // Info revisi lama: objek yatim yang dulu tetap ikut ditulis.
+    ctx.register(ctx.obj({ Title: PDFString.of('REV1-OLD-TITLE'), Author: PDFString.of('REV1-OLD-AUTHOR') }));
+    doc.catalog.set(PDFName.of('Metadata'), ctx.register(ctx.stream(
+      '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="1" pdfaid:conformance="B">'
+      + '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">XMP-OLD-TITLE</rdf:li></rdf:Alt></dc:title><dc:creator><rdf:Seq><rdf:li>XMP-OLD-AUTHOR</rdf:li></rdf:Seq></dc:creator></rdf:Description></rdf:RDF></x:xmpmeta>',
+      { Type: 'Metadata', Subtype: 'XML' })));
+    const output = await updateMetadata((await doc.save()).buffer as ArrayBuffer, { title: 'Judul & <Baru>', author: 'Penulis Baru' });
+
+    const out = await PDFDocument.load(output);
+    const dump = out.context.enumerateIndirectObjects().map(([, o]) => (o instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(o).decode()) : o.toString())).join('\n');
+    expect(dump).not.toMatch(/REV1-OLD|XMP-OLD/);
+    expect(dump).toContain('<pdfaid:part>1</pdfaid:part><pdfaid:conformance>B</pdfaid:conformance>');
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const js = await pdfjs.getDocument({ data: new Uint8Array(output.slice(0)), isEvalSupported: false }).promise;
+    const { metadata } = await js.getMetadata();
+    expect(metadata?.get('dc:title')).toBe('Judul & <Baru>');
+    expect(metadata?.get('dc:creator')).toEqual(['Penulis Baru']);
+    await js.destroy();
+  });
 });
 
 describe('cropPages', () => {

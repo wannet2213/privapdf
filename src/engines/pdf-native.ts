@@ -711,10 +711,44 @@ export async function updateMetadata(input: ArrayBuffer, opts: MetadataOptions):
   }
   if (opts.creator !== undefined) doc.setCreator(opts.creator);
   doc.setModificationDate(new Date());
-  return (await doc.save()).buffer as ArrayBuffer;
+  // Pembaca yang mengutamakan XMP (pdf.js, Acrobat) akan tetap menampilkan judul/penulis lama: tulis
+  // ulang XMP dari nilai Info. Info revisi lama yang yatim ikut hilang lewat rewriteReachable.
+  const old = doc.context.lookup(doc.catalog.get(PDFName.of('Metadata')));
+  if (old instanceof PDFRawStream) {
+    let xml = '';
+    try { xml = new TextDecoder().decode(decodePDFRawStream(old).decode()); } catch { /* XMP rusak: identitas PDF/A tidak terbaca */ }
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.register(doc.context.stream(xmpFromInfo(doc, xml), { Type: 'Metadata', Subtype: 'XML' })));
+  }
+  return rewriteReachable(await doc.save());
 }
 
-/** Opsi crop per halaman (indeks berbasis 0). */
+const xmlEscape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/**
+ * XMP baru dari nilai Info. Isi XMP lama tidak dibawa (bisa memuat judul/penulis/riwayat lama),
+ * kecuali identitas PDF/A agar validator tetap mengenalinya.
+ */
+function xmpFromInfo(doc: PDFDocument, oldXml: string): Uint8Array {
+  const pdfaid = (key: string) => new RegExp(`pdfaid:${key}\\s*(?:=\\s*["']|>)\\s*([0-9A-Za-z])`).exec(oldXml)?.[1];
+  const el = (tag: string, v: string | undefined, wrap = (x: string) => x) => (v ? `<${tag}>${wrap(xmlEscape(v))}</${tag}>` : '');
+  const alt = (x: string) => `<rdf:Alt><rdf:li xml:lang="x-default">${x}</rdf:li></rdf:Alt>`;
+  const body = [
+    '<dc:format>application/pdf</dc:format>',
+    el('dc:title', doc.getTitle(), alt),
+    el('dc:creator', doc.getAuthor(), (x) => `<rdf:Seq><rdf:li>${x}</rdf:li></rdf:Seq>`),
+    el('dc:description', doc.getSubject(), alt),
+    el('pdf:Keywords', doc.getKeywords()),
+    el('pdf:Producer', doc.getProducer()),
+    el('xmp:CreatorTool', doc.getCreator()),
+    el('xmp:CreateDate', doc.getCreationDate()?.toISOString()),
+    el('xmp:ModifyDate', doc.getModificationDate()?.toISOString()),
+    el('pdfaid:part', pdfaid('part')),
+    el('pdfaid:conformance', pdfaid('conformance')),
+  ].join('');
+  // Uint8Array.from: pdf-lib memeriksa `instanceof Uint8Array`, hasil TextEncoder bisa dari realm lain.
+  return Uint8Array.from(new TextEncoder().encode(`<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">${body}</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>`));
+}
+
 export interface PageCrop {
   index: number;
   top?: number;
@@ -927,9 +961,28 @@ export async function fillForm(input: ArrayBuffer, values: Record<string, string
 
 /** Ratakan semua form/annotation menjadi konten statis — pakai qpdf WASM (pdfstudio). */
 export async function flattenForm(input: ArrayBuffer): Promise<ArrayBuffer> {
+  const src = await PDFDocument.load(input, { ignoreEncryption: true, updateMetadata: false });
+  if (src.isEncrypted) throw new Error('PDF ini terkunci. Buka dulu dengan Hapus proteksi, lalu ratakan.');
+  // qpdf hanya membuatkan appearance field teks/pilihan yang belum punya bila NeedAppearances true;
+  // tanpa itu nilainya tidak bisa jadi konten statis dan ikut terbuang di bawah.
+  const missingAp = src.getPages().some((p) => (arrayAt(src.context, p.node.get(PDFName.of('Annots'))) ?? [])
+    .some((r) => { const a = dictAt(src.context, r); return a?.get(PDFName.of('Subtype')) === PDFName.of('Widget') && !a.has(PDFName.of('AP')); }));
+  const acroForm = dictAt(src.context, src.catalog.get(PDFName.of('AcroForm')));
+  if (missingAp && acroForm) acroForm.set(PDFName.of('NeedAppearances'), PDFBool.True);
   const toolkit = await getUnlockToolkit();
-  const out = await toolkit.flatten(input, { annotations: 'all' });
-  return toArrayBuffer(out);
+  const flat = await PDFDocument.load(await toolkit.flatten(await src.save(), { annotations: 'all' }), { updateMetadata: false });
+  // Anotasi yang tersisa tidak punya appearance sehingga tidak bisa diratakan: field tetap bisa diisi,
+  // isi komentar dan nama penulisnya tetap terbaca. Buang semuanya kecuali tautan.
+  const ctx = flat.context;
+  for (const page of flat.getPages()) {
+    const annots = arrayAt(ctx, page.node.get(PDFName.of('Annots')));
+    if (!annots) continue;
+    const links = annots.filter((r) => ctx.lookup(dictAt(ctx, r)?.get(PDFName.of('Subtype'))) === PDFName.of('Link'));
+    if (links.length) page.node.set(PDFName.of('Annots'), ctx.obj(links));
+    else page.node.delete(PDFName.of('Annots'));
+  }
+  flat.catalog.delete(PDFName.of('AcroForm'));
+  return rewriteReachable(await flat.save());
 }
 
 const UNSAFE_ACTIONS = new Set(['JavaScript', 'Launch', 'SubmitForm', 'ImportData']);
