@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { createReadStream, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
@@ -16,10 +16,11 @@ function serveModelRuntime() {
       server.middlewares.use((req: { url?: string }, res: { setHeader: (k: string, v: string) => void; writeHead: (code: number) => void }, next: () => void) => {
         const url = (req.url || '').split('?')[0];
         if (!url.startsWith('/models/bg/') || !url.endsWith('.mjs')) return next();
-        const file = join(rootDir, 'public', url);
+        // Hanya berkas langsung di public/models/bg: URL mentah dari klien non-browser bisa memuat '../'.
+        const file = join(rootDir, 'public', 'models', 'bg', basename(url));
         if (!existsSync(file)) return next();
         res.setHeader('content-type', 'text/javascript');
-        createReadStream(file).pipe(res as never);
+        createReadStream(file).on('error', () => next()).pipe(res as never);
       });
     },
   };

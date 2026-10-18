@@ -236,7 +236,7 @@ curl -s https://domain-anda.com/ | grep -c googleapis                    # harus
 | `npm run serve` | Sajikan `dist/` produksi di satu port (lihat Cara 1) |
 | `npm run setup:office` | Salin aset Office WASM + patch timeout + siapkan `.gz`/`.br` (opsional) |
 | `npm run setup:models` | Unduh model AI hapus latar + runtime ONNX (opsional) |
-| `npm run setup:imgly` | Unduh aset imgly background-removal (opsional) |
+| `npm run setup:imgly` | Unduh aset imgly background-removal (opsional). Manifest dipin ke sha256 dan tiap chunk diverifikasi terhadap hash-nya sebelum ditulis; saat menaikkan versi, tinjau manifest baru lalu perbarui `MANIFEST_SHA256` di skrip |
 | `npm run setup:ocr` | Salin aset OCR tesseract.js + data bahasa (opsional) |
 | `npm run check` | Type-check TypeScript |
 | `npm run check:dist` | Periksa `dist/` tanpa build penuh (aturan worker & `.ts` mentah) |
