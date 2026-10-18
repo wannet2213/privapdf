@@ -149,8 +149,8 @@ function resourceUse({ operator, operands: a }: Op): [string, unknown] | undefin
 }
 
 // lookupMaybe melempar bila tipenya lain; di PDF cacat cukup dianggap tidak ada.
-const dictAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFDict ? v : undefined; };
-const arrayAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFArray ? v.asArray() : undefined; };
+export const dictAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFDict ? v : undefined; };
+export const arrayAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFArray ? v.asArray() : undefined; };
 
 /** Isi stream (atau array stream) yang sudah didekode, disambung dengan pemisah baris. Gagal-tertutup. */
 function contentOf(ctx: PDFContext, obj: PDFObject | PDFObject[] | undefined): Uint8Array {
@@ -233,6 +233,12 @@ function pruneResources(ctx: PDFContext, holder: PDFDict, content: Uint8Array, s
       }
     }
   }
+}
+
+/** Pangkas /Resources satu halaman ke yang dipanggil isinya (lihat pruneResources). */
+export function prunePageResources(page: PDFPage) {
+  const ctx = page.doc.context;
+  pruneResources(ctx, page.node, contentOf(ctx, page.node.get(PDFName.of('Contents'))), new Set());
 }
 
 /**

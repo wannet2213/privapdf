@@ -3,8 +3,8 @@ import type { TextEdit } from '../engines/edit-text';
 
 interface Item { text: string; x: number; y: number }
 
-// Hanya huruf/angka ASCII: karakter di luar WinAnsi digambar sebagai '?', spasi bisa bergeser.
-const norm = (s: string) => s.replace(/[^A-Za-z0-9]/g, '');
+// Hanya huruf/angka (aksara apa pun): karakter di luar WinAnsi digambar sebagai '?', spasi bisa bergeser.
+const norm = (s: string) => s.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
 const inRect = (it: Item, r: [number, number, number, number]) =>
   it.x >= Math.min(r[0], r[2]) && it.x <= Math.max(r[0], r[2]) && it.y >= Math.min(r[1], r[3]) && it.y <= Math.max(r[1], r[3]);
 
@@ -38,7 +38,10 @@ export async function verifyTextEdits(before: ArrayBuffer, after: ArrayBuffer, e
     for (const e of pageEdits) {
       if (!e.rect) continue;
       const inside = norm(now.get(p)!.filter((it) => inRect(it, e.rect!)).map((it) => it.text).join(''));
-      if (inside && !norm(e.text).includes(inside)) {
+      // Item lama yang masih ada utuh di tempatnya — walau teksnya kebetulan bagian dari teks baru.
+      const kept = old.get(p)!.filter((it) => inRect(it, e.rect!) && norm(it.text) && norm(it.text) !== norm(e.text))
+        .some((o) => now.get(p)!.some((n) => n.text === o.text && Math.abs(n.x - o.x) <= 0.5 && Math.abs(n.y - o.y) <= 0.5));
+      if (kept || (inside && !norm(e.text).includes(inside))) {
         problems.push(`Halaman ${p + 1}: teks lama masih terbaca di baris yang diedit — untuk data sensitif pakai Sensor PDF.`);
         break;
       }

@@ -7,10 +7,10 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 
 /** Font pratinjau sebuah baris: font asli halaman (FontFace dari pdf.js) dengan cadangan bergaya sama. */
 interface LineFont { family: string; bold: boolean; italic: boolean }
-/** Baris teks dalam koordinat tampilan halaman (poin, kiri-atas = 0,0). */
-interface Line { text: string; x: number; baseline: number; width: number; size: number; font: LineFont }
+/** Baris teks dalam koordinat tampilan halaman (poin, kiri-atas = 0,0); `lo`–`hi` = rentang baseline item yang digabung. */
+interface Line { text: string; x: number; baseline: number; lo: number; hi: number; width: number; size: number; font: LineFont }
 /** Suntingan di panel; `line` menunjuk baris asli, tanpa `line` = teks baru. */
-interface Draft { page: number; line?: number; x: number; baseline: number; width: number; size: number; text: string; font?: LineFont }
+interface Draft { page: number; line?: number; x: number; baseline: number; lo?: number; hi?: number; width: number; size: number; text: string; font?: LineFont }
 
 interface EditTextPanelProps {
   bytes: ArrayBuffer;
@@ -42,14 +42,14 @@ function lineFont(page: PDFPageProxy, fontName: string, generic: string | undefi
 }
 
 /** Gabungkan item pdf.js se-baseline jadi satu baris: unit edit, agar penghapusan tidak menyisakan potongan. */
-function toLines(items: TextItem[], viewport: PageViewport, fontOf: (name: string) => LineFont): Line[] {
+export function toLines(items: TextItem[], viewport: PageViewport, fontOf: (name: string) => LineFont): Line[] {
   const raw = items.flatMap((it) => {
     if (!it.str.trim()) return [];
     const m = Util.transform(viewport.transform, it.transform);
     const size = Math.hypot(m[2], m[3]);
     // Hanya teks mendatar di layar; teks miring/vertikal tidak bisa diedit per baris.
     if (size < 1 || m[0] <= 0 || Math.abs(m[1]) > Math.abs(m[0]) * 0.01) return [];
-    return [{ text: it.str, x: m[4], baseline: m[5], width: it.width * viewport.scale, size, font: fontOf(it.fontName) }];
+    return [{ text: it.str, x: m[4], baseline: m[5], lo: m[5], hi: m[5], width: it.width * viewport.scale, size, font: fontOf(it.fontName) }];
   });
   const lines: (Line & { end: number })[] = [];
   for (const r of raw) {
@@ -57,6 +57,10 @@ function toLines(items: TextItem[], viewport: PageViewport, fontOf: (name: strin
     const gap = cur ? r.x - cur.end : Infinity;
     if (cur && Math.abs(cur.baseline - r.baseline) <= Math.max(2, Math.max(cur.size, r.size) * 0.35) && gap > -r.size && gap <= r.size * 12) {
       cur.text += gap > r.size * 0.2 && !/\s$/.test(cur.text) && !/^\s/.test(r.text) ? ` ${r.text}` : r.text;
+      // Area hapus harus mencakup setiap item yang digabung, termasuk yang mulai di kiri atau sedikit naik/turun.
+      cur.x = Math.min(cur.x, r.x);
+      cur.lo = Math.min(cur.lo, r.baseline);
+      cur.hi = Math.max(cur.hi, r.baseline);
       cur.end = Math.max(cur.end, r.x + r.width);
       cur.width = cur.end - cur.x;
       cur.size = Math.max(cur.size, r.size);
@@ -65,6 +69,16 @@ function toLines(items: TextItem[], viewport: PageViewport, fontOf: (name: strin
     }
   }
   return lines.map(({ end: _end, ...line }) => ({ ...line, text: line.text.trim() }));
+}
+
+/**
+ * Area hapus baris dalam poin PDF. Hanya awal tiap operasi teks yang diuji engine, jadi cukup pita
+ * sekitar rentang baseline item yang digabung, dari item paling kiri sampai ujung baris.
+ */
+export function lineRect(vp: PageViewport, d: Pick<Draft, 'x' | 'baseline' | 'lo' | 'hi' | 'width' | 'size'>): [number, number, number, number] {
+  const [ax, ay] = vp.convertToPdfPoint(d.x - 1, (d.lo ?? d.baseline) - d.size * 0.45);
+  const [bx, by] = vp.convertToPdfPoint(d.x + d.width + 1, (d.hi ?? d.baseline) + d.size * 0.45);
+  return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
 }
 
 export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
@@ -167,7 +181,7 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
   const openLine = (line: number) => {
     const existing = draftForLine(line);
     const l = lines[line];
-    setEditor({ draft: existing?.d ?? { page: currentPage, line, x: l.x, baseline: l.baseline, width: l.width, size: l.size, text: l.text, font: l.font }, index: existing?.index ?? -1 });
+    setEditor({ draft: existing?.d ?? { page: currentPage, line, x: l.x, baseline: l.baseline, lo: l.lo, hi: l.hi, width: l.width, size: l.size, text: l.text, font: l.font }, index: existing?.index ?? -1 });
   };
 
   const onLayerClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -186,12 +200,7 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
       if (!vp) return [];
       const [x, y] = vp.convertToPdfPoint(d.x, d.baseline);
       const edit: TextEdit = { page: d.page, text: d.text, x, y, size: d.size, rotation: vp.rotation };
-      if (d.line !== undefined) {
-        // Area baris: hanya awal tiap operasi teks yang diuji, jadi cukup pita tipis sekitar baseline.
-        const [ax, ay] = vp.convertToPdfPoint(d.x - 1, d.baseline - d.size * 0.45);
-        const [bx, by] = vp.convertToPdfPoint(d.x + d.width + 1, d.baseline + d.size * 0.45);
-        edit.rect = [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
-      }
+      if (d.line !== undefined) edit.rect = lineRect(vp, d);
       return [edit];
     });
     setFull(false);

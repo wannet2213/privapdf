@@ -6,7 +6,7 @@ import {
 } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { parseOps, spliceOps, type Op } from '../lib/content-stream';
-import { rewriteReachable } from './pdf-native';
+import { rewriteReachable, prunePageResources, dictAt, arrayAt } from './pdf-native';
 
 export interface TextEdit {
   page: number;
@@ -259,6 +259,59 @@ function covers(file: Uint8Array, text: string): boolean {
   }
 }
 
+const OCR_ONLY = 'Baris ini teks OCR tak terlihat di atas gambar scan: gambarnya tidak bisa diedit, jadi nilai lama tetap terlihat. Untuk menutup data di scan, pakai Sensor PDF.';
+// Pembawa teks pengganti yang tetap memuat teks lama setelah glyph-nya dihapus.
+const ALT_TEXT_KEYS = ['ActualText', 'Alt', 'E'];
+
+/** Nilai number tree (mis. ParentTree) untuk `key`; telusur penuh, tanpa memakai /Limits. */
+function numberTreeGet(doc: PDFDocument, node: PDFDict | undefined, key: number, depth = 0): PDFObject | undefined {
+  if (!node || depth > 32) return undefined;
+  const nums = arrayAt(doc.context, node.get(PDFName.of('Nums'))) ?? [];
+  for (let i = 0; i + 1 < nums.length; i += 2) if (num(doc.context.lookup(nums[i])) === key) return nums[i + 1];
+  for (const kid of arrayAt(doc.context, node.get(PDFName.of('Kids'))) ?? []) {
+    const found = numberTreeGet(doc, dictAt(doc.context, kid), key, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * Marked content yang membungkus op terhapus: /ActualText, /Alt, /E-nya (inline atau lewat
+ * /Properties bernama) dan StructElem pemilik MCID-nya masih memuat teks lama — dibaca pdf.js,
+ * pembaca layar, dan salin-tempel. Op BDC ditulis ulang tanpa pembawa itu (dict /Properties
+ * bersama tidak diubah; entri yang tak lagi dipanggil hilang saat Resources dipangkas).
+ */
+function stripMarkedContent(doc: PDFDocument, page: PDFPage, ops: Op[], removed: Map<Op, string>) {
+  const ctx = doc.context;
+  const props = dictAt(ctx, page.node.Resources()?.get(PDFName.of('Properties')));
+  const wrapping = new Set<Op>();
+  const stack: Op[] = [];
+  for (const op of ops) {
+    if (op.operator === 'BDC' || op.operator === 'BMC') stack.push(op);
+    else if (op.operator === 'EMC') stack.pop();
+    else if (removed.has(op)) stack.forEach((m) => wrapping.add(m));
+  }
+  const mcids: number[] = [];
+  for (const op of wrapping) {
+    if (op.operator !== 'BDC') continue;
+    const [tag, list] = op.operands;
+    const named = typeof list === 'string' ? dictAt(ctx, props?.get(PDFName.of(list))) : undefined;
+    const inline = list && typeof list === 'object' && !(list instanceof Uint8Array) && !Array.isArray(list) ? list : undefined;
+    const mcid = named ? num(ctx.lookup(named.get(PDFName.of('MCID')))) : typeof inline?.MCID === 'number' ? inline.MCID : undefined;
+    if (mcid !== undefined) mcids.push(mcid);
+    const carries = ALT_TEXT_KEYS.some((k) => (named ? named.has(PDFName.of(k)) : inline !== undefined && k in inline));
+    if (carries && typeof tag === 'string') removed.set(op, mcid !== undefined ? `${PDFName.of(tag)} <</MCID ${mcid}>> BDC` : `${PDFName.of(tag)} BMC`);
+  }
+
+  const structParents = num(ctx.lookup(page.node.get(PDFName.of('StructParents'))));
+  const root = dictAt(ctx, doc.catalog.get(PDFName.of('StructTreeRoot')));
+  const owners = structParents === undefined ? undefined : arrayAt(ctx, numberTreeGet(doc, dictAt(ctx, root?.get(PDFName.of('ParentTree'))), structParents));
+  for (const mcid of mcids) {
+    const elem = dictAt(ctx, owners?.[mcid]);
+    for (const k of ALT_TEXT_KEYS) elem?.delete(PDFName.of(k));
+  }
+}
+
 /**
  * Ganti/tambah teks. Operasi teks asli yang mulai di dalam area baris dibuang dari content stream
  * (diganti TJ kosong selebar aslinya agar teks lain tidak bergeser), lalu teks baru digambar dengan
@@ -288,12 +341,15 @@ export async function editText(input: ArrayBuffer, edits: TextEdit[]): Promise<A
     const page = pages[pageIndex];
     if (!page) continue;
     const bytes = contentBytes(page);
-    const shown = interpret(parseOps(bytes), page.node.Resources()?.lookupMaybe(PDFName.of('Font'), PDFDict));
+    const ops = parseOps(bytes);
+    const shown = interpret(ops, page.node.Resources()?.lookupMaybe(PDFName.of('Font'), PDFDict));
     const removed = new Map<Op, string>();
     const anchors = pageEdits.map((edit) => {
       if (!edit.rect) return undefined;
       const [x0, y0, x1, y1] = edit.rect;
       const hits = shown.filter((s) => s.x >= Math.min(x0, x1) && s.x <= Math.max(x0, x1) && s.y >= Math.min(y0, y1) && s.y <= Math.max(y0, y1));
+      // Teks tak terlihat (Tr 3/7, lapisan OCR): yang dilihat pengguna ada di gambar, bukan di sini.
+      if (hits.length && hits.every((s) => s.renderMode === 3 || s.renderMode === 7)) throw new Error(OCR_ONLY);
       hits.forEach((s) => removed.set(s.op, s.blank));
       // Jangkar = op paling awal di arah baris.
       return hits.sort((a, b) => {
@@ -302,7 +358,11 @@ export async function editText(input: ArrayBuffer, edits: TextEdit[]): Promise<A
       })[0];
     });
     if (removed.size) {
+      stripMarkedContent(doc, page, ops, removed);
       page.node.set(PDFName.of('Contents'), doc.context.register(doc.context.flateStream(spliceOps(bytes, removed))));
+      // Data cadangan halaman (aplikasi, thumbnail, XMP) bisa memuat salinan teks lama.
+      for (const key of ['PieceInfo', 'Thumb', 'Metadata']) page.node.delete(PDFName.of(key));
+      prunePageResources(page);
     }
 
     for (const [i, edit] of pageEdits.entries()) {
