@@ -500,6 +500,57 @@ describe('sanitizePdf', () => {
     expect(out.getForm().getFields().map((f) => f.getName())).toEqual(['nama']);
     expect(out.getPageCount()).toBe(1);
   });
+
+  it('drops attachments, XFA, and JavaScript carriers wherever they hang', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([200, 300]);
+    doc.getForm().createTextField('nama').addToPage(page, { x: 10, y: 10 });
+    const ctx = doc.context;
+    const annot = (o: Record<string, unknown>) => ctx.register(ctx.obj({ Type: 'Annot', Rect: [0, 0, 10, 10], ...o } as never));
+    const file = (text: string) => ctx.obj({ Type: 'Filespec', F: PDFString.of('x.txt'), EF: { F: ctx.register(ctx.flateStream(text, { Type: 'EmbeddedFile' })) } });
+    // Lampiran yang tetap terjangkau setelah lepas dari /Annots: lewat Popup, balasan, dan struktur.
+    const viaPopup = annot({ Subtype: 'FileAttachment', FS: file('RAHASIA-LAMPIRAN-POPUP') });
+    const viaIrt = annot({ Subtype: 'FileAttachment', FS: file('RAHASIA-LAMPIRAN-IRT') });
+    const viaObjr = annot({ Subtype: ctx.register(PDFName.of('FileAttachment')), FS: file('RAHASIA-LAMPIRAN-OBJR') });
+    for (const a of [viaPopup, viaIrt, viaObjr]) page.node.addAnnot(a);
+    page.node.addAnnot(annot({ Subtype: 'Popup', Parent: viaPopup }));
+    page.node.addAnnot(annot({ Subtype: 'Text', IRT: viaIrt, Contents: PDFString.of('setuju') }));
+    const root = ctx.nextRef();
+    ctx.assign(root, ctx.obj({ Type: 'StructTreeRoot', K: [{ Type: 'StructElem', S: 'Annot', P: root, K: [{ Type: 'OBJR', Obj: viaObjr, Pg: page.ref }] }] }));
+    doc.catalog.set(PDFName.of('StructTreeRoot'), root);
+    // Skrip RichMedia adalah berkas tertanam; Rendition /JS dan 3D /OnInstantiate bukan aksi JavaScript.
+    const script = ctx.register(file('RAHASIA-RICHMEDIA'));
+    page.node.addAnnot(annot({ Subtype: 'RichMedia', RichMediaContent: { Assets: { Names: [PDFString.of('s.js'), script] } }, RichMediaSettings: { Activation: { Scripts: [script] } } }));
+    page.node.addAnnot(annot({ Subtype: 'Link', A: { S: 'Rendition', OP: 4, JS: PDFString.of('RAHASIA-RENDITION') } }));
+    page.node.addAnnot(annot({ Subtype: 'Link', A: { S: 'URI', URI: PDFString.of('https://contoh.id'), Next: { S: 'Rendition', JS: PDFString.of('RAHASIA-NEXT') } } }));
+    page.node.addAnnot(annot({ Subtype: '3D', '3DD': ctx.register(ctx.flateStream('3d', { Type: '3D', Subtype: 'U3D', OnInstantiate: ctx.register(ctx.flateStream('RAHASIA-3D')) })) }));
+    const outlines = ctx.nextRef();
+    const item = ctx.register(ctx.obj({ Title: PDFString.of('Bab 1'), Parent: outlines, Dest: [page.ref, 'Fit'], A: { S: 'Rendition', JS: PDFString.of('RAHASIA-OUTLINE') } }));
+    ctx.assign(outlines, ctx.obj({ Type: 'Outlines', First: item, Last: item, Count: 1 }));
+    doc.catalog.set(PDFName.of('Outlines'), outlines);
+    // XFA statis: field AcroForm tetap, paket XFA (skrip + xmpmeta) dibuang.
+    doc.getForm().acroForm.dict.set(PDFName.of('XFA'), ctx.obj([
+      PDFString.of('template'), ctx.register(ctx.flateStream('<script contentType="application/x-javascript">RAHASIA-XFA-JS</script>')),
+      PDFString.of('xmpmeta'), ctx.register(ctx.flateStream('<x:xmpmeta><dc:creator>RAHASIA-XFA-XMP</dc:creator></x:xmpmeta>')),
+    ]));
+
+    const out = await PDFDocument.load(await sanitizePdf((await doc.save()).buffer as ArrayBuffer), { updateMetadata: false });
+    const dump = out.context.enumerateIndirectObjects().map(([, o]) => (o instanceof PDFRawStream ? o.dict.toString() + new TextDecoder('latin1').decode(decodePDFRawStream(o).decode()) : o.toString())).join('\n');
+    for (const leak of ['RAHASIA', '/EmbeddedFile', '/XFA', '/OnInstantiate', '/FileAttachment']) expect(dump).not.toContain(leak);
+    expect(dump).not.toMatch(/\/JS\b/);
+    expect(dump).toContain('https://contoh.id');
+    expect(dump).toContain('Bab 1');
+    expect(out.getForm().getFields().map((f) => f.getName())).toEqual(['nama']);
+  });
+
+  it('refuses dynamic XFA forms instead of breaking them', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([200, 300]);
+    const ctx = doc.context;
+    doc.catalog.set(PDFName.of('AcroForm'), ctx.obj({ Fields: [], XFA: ctx.register(ctx.flateStream('<xdp:xdp/>')) }));
+    doc.catalog.set(PDFName.of('NeedsRendering'), ctx.obj(true));
+    await expect(sanitizePdf((await doc.save()).buffer as ArrayBuffer)).rejects.toThrow(/XFA dinamis/);
+  });
 });
 
 describe('redactPdf', () => {

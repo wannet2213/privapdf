@@ -1,5 +1,5 @@
 import {
-  PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, PDFRawStream, decodePDFRawStream, type PDFContext, type PDFObject, degrees,
+  PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, PDFRawStream, PDFBool, decodePDFRawStream, type PDFContext, type PDFObject, degrees,
   pushGraphicsState, popGraphicsState, beginText, endText, setTextRenderingMode, TextRenderingMode,
   setFontAndSize, setCharacterSqueeze, rotateAndSkewTextDegreesAndTranslate, showText, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
@@ -928,6 +928,11 @@ export async function flattenForm(input: ArrayBuffer): Promise<ArrayBuffer> {
 
 const UNSAFE_ACTIONS = new Set(['JavaScript', 'Launch', 'SubmitForm', 'ImportData']);
 
+// Kunci yang dibuang di mana pun: aksi otomatis, metadata/data privat, isi lampiran (/EF, /RF —
+// termasuk skrip RichMedia), paket XFA (skrip + xmpmeta), dan pembawa JavaScript di luar aksi
+// JavaScript (Rendition /JS, 3D /OnInstantiate).
+const SANITIZE_KEYS = ['AA', 'Metadata', 'PieceInfo', 'AF', 'EF', 'RF', 'XFA', 'NeedsRendering', 'JS', 'OnInstantiate'];
+
 /**
  * Buang data tersembunyi: info dokumen, XMP, data privat aplikasi (PieceInfo), lampiran,
  * JavaScript, dan aksi otomatis. Isi halaman, tautan, formulir, dan bookmark tetap.
@@ -935,6 +940,12 @@ const UNSAFE_ACTIONS = new Set(['JavaScript', 'Launch', 'SubmitForm', 'ImportDat
 export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
   const doc = await PDFDocument.load(input, { updateMetadata: false });
   const { context, catalog } = doc;
+  // Formulir XFA dinamis hanya punya isi di paket XFA (halamannya placeholder): membuang XFA berarti
+  // merusak dokumen, membiarkannya berarti skripnya ikut. Tolak saja.
+  const acroForm = dictAt(context, catalog.get(PDFName.of('AcroForm')));
+  if (acroForm?.has(PDFName.of('XFA')) && (context.lookup(catalog.get(PDFName.of('NeedsRendering'))) === PDFBool.True || !arrayAt(context, acroForm.get(PDFName.of('Fields')))?.length)) {
+    throw new Error('PDF ini formulir XFA dinamis: isinya hanya ada di XFA, jadi tidak bisa dibersihkan tanpa merusak dokumen.');
+  }
   context.trailerInfo.Info = undefined;
   catalog.delete(PDFName.of('OpenAction'));
   const names = catalog.lookupMaybe(PDFName.of('Names'), PDFDict);
@@ -951,16 +962,22 @@ export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
     if (obj instanceof PDFStream) return walk(obj.dict);
     if (obj instanceof PDFArray) return obj.asArray().forEach(walk);
     if (!(obj instanceof PDFDict)) return;
-    for (const key of ['AA', 'Metadata', 'PieceInfo', 'AF']) obj.delete(PDFName.of(key));
+    for (const key of SANITIZE_KEYS) obj.delete(PDFName.of(key));
     for (const key of ['A', 'Next']) if (isUnsafeAction(obj.get(PDFName.of(key)))) obj.delete(PDFName.of(key));
     obj.entries().forEach(([, v]) => walk(v));
   };
   context.enumerateIndirectObjects().forEach(([, obj]) => walk(obj));
 
+  // Anotasi lampiran bisa tetap terjangkau lewat Popup /Parent, balasan /IRT, atau OBJR struktur:
+  // hapus objeknya sendiri, bukan hanya entri /Annots-nya. /Subtype bisa berupa rujukan tidak langsung.
   for (const page of doc.getPages()) {
-    const annots = page.node.Annots();
-    for (let i = (annots?.size() ?? 0) - 1; i >= 0; i--) {
-      if (annots!.lookupMaybe(i, PDFDict)?.get(PDFName.of('Subtype')) === PDFName.of('FileAttachment')) annots!.remove(i);
+    const annots = context.lookup(page.node.get(PDFName.of('Annots')));
+    if (!(annots instanceof PDFArray)) continue;
+    for (let i = annots.size() - 1; i >= 0; i--) {
+      if (context.lookup(dictAt(context, annots.get(i))?.get(PDFName.of('Subtype'))) !== PDFName.of('FileAttachment')) continue;
+      const ref = annots.get(i);
+      annots.remove(i);
+      if (ref instanceof PDFRef) context.delete(ref);
     }
   }
 
