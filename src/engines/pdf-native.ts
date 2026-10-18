@@ -1,9 +1,10 @@
 import {
-  PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, type PDFObject, degrees,
+  PDFDocument, PDFDict, PDFArray, PDFName, PDFRef, PDFStream, PDFRawStream, decodePDFRawStream, type PDFContext, type PDFObject, degrees,
   pushGraphicsState, popGraphicsState, beginText, endText, setTextRenderingMode, TextRenderingMode,
   setFontAndSize, setCharacterSqueeze, rotateAndSkewTextDegreesAndTranslate, showText, StandardFonts, rgb, PDFTextField, PDFCheckBox, PDFDropdown, PDFRadioGroup, PDFOptionList, type PDFFont, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
+import { parseOps, type Op } from '../lib/content-stream';
 
 let unlockToolkitPromise: Promise<PdfToolkit> | undefined;
 function getUnlockToolkit() {
@@ -33,12 +34,7 @@ export async function splitPdfEach(input: ArrayBuffer, indices: number[]): Promi
   const valid = indices.filter((i) => i >= 0 && i < pageCount);
   if (!valid.length) throw new Error('Tidak ada halaman valid untuk diekstrak.');
   const outputs: ArrayBuffer[] = [];
-  for (const index of valid) {
-    const next = await PDFDocument.create();
-    const [page] = await next.copyPages(doc, [index]);
-    next.addPage(page);
-    outputs.push((await next.save()).buffer as ArrayBuffer);
-  }
+  for (const index of valid) outputs.push(await extractPages(doc, [index]));
   return outputs;
 }
 
@@ -53,10 +49,7 @@ export async function splitPdfRanges(input: ArrayBuffer, ranges: [number, number
     }
     const indices: number[] = [];
     for (let i = start; i <= end; i++) indices.push(i);
-    const next = await PDFDocument.create();
-    const pages = await next.copyPages(doc, indices);
-    pages.forEach((p) => next.addPage(p));
-    outputs.push((await next.save()).buffer as ArrayBuffer);
+    outputs.push(await extractPages(doc, indices));
   }
   return outputs;
 }
@@ -73,10 +66,7 @@ export async function splitPdfGroups(input: ArrayBuffer, groups: number[][]): Pr
         throw new Error(`Halaman ${idx + 1} berada di luar batas dokumen (${pageCount} halaman).`);
       }
     }
-    const next = await PDFDocument.create();
-    const pages = await next.copyPages(doc, group);
-    pages.forEach((p) => next.addPage(p));
-    outputs.push((await next.save()).buffer as ArrayBuffer);
+    outputs.push(await extractPages(doc, group));
   }
   if (!outputs.length) throw new Error('Tidak ada kelompok halaman valid.');
   return outputs;
@@ -141,27 +131,196 @@ async function addJpegPage(doc: PDFDocument, jpg: ArrayBuffer, scale: number) {
 // tersensor, mis. balasan komentar (/IRT) atau field formulir (/Kids) yang nilainya ada di sana.
 const REDACT_PAGE_KEYS = new Set(['Type', 'Parent', 'MediaBox', 'CropBox', 'BleedBox', 'TrimBox', 'ArtBox', 'Rotate', 'Contents', 'Resources', 'Group', 'UserUnit']);
 
+const UNREADABLE_CONTENT = 'Isi salah satu halaman tidak bisa dibaca, jadi tidak bisa dipastikan sisa halaman lain ikut terbuang. Proses dibatalkan.';
+const RESOURCES = PDFName.of('Resources');
+const RESOURCE_CATEGORIES = new Set(['Font', 'XObject', 'ExtGState', 'Shading', 'ColorSpace', 'Pattern', 'Properties']);
+
+/** Kategori dan nama resource yang dipanggil satu operator content stream. */
+function resourceUse({ operator, operands: a }: Op): [string, unknown] | undefined {
+  switch (operator) {
+    case 'Tf': return ['Font', a[0]];
+    case 'Do': return ['XObject', a[0]];
+    case 'gs': return ['ExtGState', a[0]];
+    case 'sh': return ['Shading', a[0]];
+    case 'cs': case 'CS': return ['ColorSpace', a[0]];
+    case 'scn': case 'SCN': return ['Pattern', a[a.length - 1]];
+    case 'BDC': case 'DP': return ['Properties', a[1]];
+  }
+}
+
+// lookupMaybe melempar bila tipenya lain; di PDF cacat cukup dianggap tidak ada.
+const dictAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFDict ? v : undefined; };
+const arrayAt = (ctx: PDFContext, o: PDFObject | undefined) => { const v = ctx.lookup(o); return v instanceof PDFArray ? v.asArray() : undefined; };
+
+/** Isi stream (atau array stream) yang sudah didekode, disambung dengan pemisah baris. Gagal-tertutup. */
+function contentOf(ctx: PDFContext, obj: PDFObject | PDFObject[] | undefined): Uint8Array {
+  const items = Array.isArray(obj) ? obj : arrayAt(ctx, obj) ?? (obj ? [obj] : []);
+  const parts = items.map((item) => {
+    const s = ctx.lookup(item);
+    if (s === undefined) return new Uint8Array();
+    if (!(s instanceof PDFRawStream)) throw new Error(UNREADABLE_CONTENT);
+    try { return decodePDFRawStream(s).decode(); } catch { throw new Error(UNREADABLE_CONTENT); }
+  });
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length + 1, 0));
+  let offset = 0;
+  for (const p of parts) { out.set(p, offset); offset += p.length; out[offset++] = 10; }
+  return out;
+}
+
+const type3Procs = (ctx: PDFContext, font: PDFDict) => contentOf(ctx, dictAt(ctx, font.get(PDFName.of('CharProcs')))?.values() ?? []);
+const isType3 = (o: unknown): o is PDFDict => o instanceof PDFDict && o.get(PDFName.of('Subtype')) === PDFName.of('Type3');
+
+/**
+ * Bangun ulang /Resources milik `holder` (halaman, Form XObject, pola, font Type3, appearance) hanya
+ * dengan nama yang benar-benar dipanggil isinya, lalu turun ke objek yang dipanggil. Resources yang
+ * dipakai bersama halaman lain tidak diubah — tiap holder mendapat dict sendiri — sehingga gambar,
+ * pola, ExtGState, atau property list milik halaman yang dibuang tidak lagi terjangkau.
+ */
+function pruneResources(ctx: PDFContext, holder: PDFDict, content: Uint8Array, seen: Set<PDFDict>) {
+  if (seen.has(holder)) return;
+  seen.add(holder);
+  const res = dictAt(ctx, holder.get(RESOURCES));
+  if (!res) return;
+  const category = (cat: string) => dictAt(ctx, res.get(PDFName.of(cat)));
+  const used = new Map<string, Set<string>>();
+  let inlineImage = false;
+  // Form XObject / font Type3 tanpa Resources sendiri memakai Resources pemanggilnya: pindai di sini juga.
+  const queue = [content];
+  const inherited = new Set<PDFObject>();
+  while (queue.length) {
+    for (const op of parseOps(queue.pop()!)) {
+      if (op.operator === 'BI') inlineImage = true;
+      const use = resourceUse(op);
+      if (!use || typeof use[1] !== 'string') continue;
+      const [cat, name] = use as [string, string];
+      if (!used.has(cat)) used.set(cat, new Set());
+      used.get(cat)!.add(name);
+      const obj = ctx.lookup(category(cat)?.get(PDFName.of(name)));
+      if (!obj || inherited.has(obj)) continue;
+      if (obj instanceof PDFRawStream && obj.dict.get(PDFName.of('Subtype')) === PDFName.of('Form') && !obj.dict.has(RESOURCES)) {
+        inherited.add(obj);
+        queue.push(contentOf(ctx, obj));
+      } else if (isType3(obj) && !obj.has(RESOURCES)) {
+        inherited.add(obj);
+        queue.push(type3Procs(ctx, obj));
+      }
+    }
+  }
+
+  const pruned = ctx.obj({}) as PDFDict;
+  for (const [key, value] of res.entries()) {
+    const cat = key.decodeText();
+    // Dict inline image (BI … ID) tidak di-tokenize, jadi nama color space-nya tidak terlihat: simpan semua.
+    if (!RESOURCE_CATEGORIES.has(cat) || (cat === 'ColorSpace' && inlineImage)) { pruned.set(key, value); continue; }
+    const kept = ctx.obj({}) as PDFDict;
+    for (const name of used.get(cat) ?? []) {
+      const entry = category(cat)?.get(PDFName.of(name));
+      if (entry) kept.set(PDFName.of(name), entry);
+    }
+    if (kept.keys().length) pruned.set(key, kept);
+  }
+  holder.set(RESOURCES, pruned);
+
+  for (const [cat, names] of used) {
+    for (const name of names) {
+      const obj = ctx.lookup(category(cat)?.get(PDFName.of(name)));
+      if (obj instanceof PDFRawStream) pruneResources(ctx, obj.dict, contentOf(ctx, obj), seen); // form, pola tiling
+      else if (isType3(obj)) pruneResources(ctx, obj, type3Procs(ctx, obj), seen);
+      else if (cat === 'ExtGState' && obj instanceof PDFDict) {
+        const smask = dictAt(ctx, obj.get(PDFName.of('SMask')));
+        const group = smask && ctx.lookup(smask.get(PDFName.of('G')));
+        if (group instanceof PDFRawStream) pruneResources(ctx, group.dict, contentOf(ctx, group), seen);
+      }
+    }
+  }
+}
+
+/**
+ * pdf-lib copyPages menyalin semua yang dirujuk halaman. Putus rantai dict biasa dari halaman yang
+ * disalin ke anotasi/field halaman yang tidak ikut — qpdf --pages hanya me-null-kan rujukan ke
+ * halaman, bukan ke dict ini: balasan /IRT, Popup, field formulir yang widget-nya di halaman lain
+ * (nilainya ada di sana), dan bead artikel /B.
+ */
+function detachDroppedPages(out: PDFDocument) {
+  const ctx = out.context;
+  const annots = new Set<PDFObject>();
+  for (const page of out.getPages()) {
+    page.node.delete(PDFName.of('B'));
+    for (const ref of arrayAt(ctx, page.node.get(PDFName.of('Annots'))) ?? []) annots.add(ref);
+  }
+  // Field yang masih punya widget di halaman yang disalin.
+  const live = new Set<PDFDict>();
+  for (const ref of annots) {
+    for (let d = dictAt(ctx, ref); d && !live.has(d); d = dictAt(ctx, d.get(PDFName.of('Parent')))) live.add(d);
+  }
+  for (const field of live) {
+    const kids = arrayAt(ctx, field.get(PDFName.of('Kids')));
+    if (!kids) continue;
+    const keep = kids.filter((k) => { const d = dictAt(ctx, k); return d !== undefined && live.has(d); });
+    field.set(PDFName.of('Kids'), ctx.obj(keep));
+  }
+  for (const ref of annots) {
+    const annot = dictAt(ctx, ref);
+    if (!annot) continue;
+    for (const key of ['IRT', 'Popup']) if (annot.has(PDFName.of(key)) && !annots.has(annot.get(PDFName.of(key))!)) annot.delete(PDFName.of(key));
+    if (annot.get(PDFName.of('Subtype')) === PDFName.of('Popup') && annot.has(PDFName.of('Parent')) && !annots.has(annot.get(PDFName.of('Parent'))!)) annot.delete(PDFName.of('Parent'));
+  }
+}
+
+/**
+ * Selesaikan dokumen hasil salin-halaman: putus rantai ke halaman yang tidak ikut, pangkas Resources
+ * tiap halaman (dan appearance anotasinya) ke yang dipanggil isinya, lalu tulis lewat qpdf --pages
+ * yang me-null-kan rujukan ke halaman lain dan hanya menulis objek yang masih terjangkau.
+ * Hanya jalan di worker: CSP halaman memblokir kompilasi WASM.
+ */
+async function savePagesOnly(out: PDFDocument, pages = out.getPages()): Promise<ArrayBuffer> {
+  const ctx = out.context;
+  detachDroppedPages(out);
+  const seen = new Set<PDFDict>();
+  for (const page of pages) {
+    pruneResources(ctx, page.node, contentOf(ctx, page.node.get(PDFName.of('Contents'))), seen);
+    for (const ref of arrayAt(ctx, page.node.get(PDFName.of('Annots'))) ?? []) {
+      const ap = dictAt(ctx, dictAt(ctx, ref)?.get(PDFName.of('AP')));
+      for (const state of ap?.values() ?? []) {
+        const s = ctx.lookup(state);
+        for (const x of s instanceof PDFDict ? s.values().map((v) => ctx.lookup(v)) : [s]) {
+          if (x instanceof PDFRawStream) pruneResources(ctx, x.dict, contentOf(ctx, x), seen);
+        }
+      }
+    }
+  }
+  const toolkit = await getUnlockToolkit();
+  return toArrayBuffer(await toolkit.raw([await out.save()], ['--empty', '--pages', '$in0', '1-z', '--', '--remove-unreferenced-resources=yes', '--object-streams=generate', '$out']));
+}
+
+/** Salin halaman terpilih (urutan sesuai `indices`) ke dokumen baru tanpa isi halaman lain. */
+async function extractPages(doc: PDFDocument, indices: number[]): Promise<ArrayBuffer> {
+  const out = await PDFDocument.create();
+  for (const page of await out.copyPages(doc, indices)) out.addPage(page);
+  return savePagesOnly(out);
+}
+
 /**
  * Ganti halaman tersensor dengan gambarnya (kotak hitam sudah tertanam di piksel). Halaman lain
  * disalin tanpa anotasi ke dokumen baru — info dokumen, bookmark, dan formulir tidak ikut.
  */
 export async function redactPdf(input: ArrayBuffer, jpgs: Map<number, ArrayBuffer>, scale: number): Promise<ArrayBuffer> {
   const src = await PDFDocument.load(input);
+  // Indeks di luar dokumen berarti preview dan mesin tidak sepakat soal halaman: jangan diam-diam lewat.
+  for (const i of jpgs.keys()) if (!Number.isInteger(i) || i < 0 || i >= src.getPageCount()) throw new Error(`Halaman ${i + 1} yang disensor tidak ada di dokumen.`);
   for (const page of src.getPages()) {
     for (const [key] of page.node.entries()) if (!REDACT_PAGE_KEYS.has(key.decodeText())) page.node.delete(key);
   }
   const out = await PDFDocument.create();
   const kept = await out.copyPages(src, src.getPageIndices().filter((i) => !jpgs.has(i)));
+  const copied = [...kept];
   for (const i of src.getPageIndices()) {
     const jpg = jpgs.get(i);
     if (jpg) await addJpegPage(out, jpg, scale);
     else out.addPage(kept.shift()!);
   }
-  // Resources bisa dipakai bersama halaman tersensor, jadi gambar/teksnya ikut tersalin walau tak
-  // tampil. qpdf --pages memangkas resource yang tidak dipanggil konten tiap halaman, lalu hanya
-  // menulis objek yang masih terjangkau.
-  const toolkit = await getUnlockToolkit();
-  return toArrayBuffer(await toolkit.raw([await out.save()], ['--empty', '--pages', '$in0', '1-z', '--', '--remove-unreferenced-resources=yes', '--object-streams=generate', '$out']));
+  // Resources bisa dipakai bersama halaman tersensor: pangkas per halaman salinan sebelum ditulis.
+  return savePagesOnly(out, copied);
 }
 
 /** Hapus halaman berdasarkan index 0-based. */
@@ -171,10 +330,7 @@ export async function deletePages(input: ArrayBuffer, indices: number[]): Promis
   const toDelete = new Set(indices.filter((i) => i >= 0 && i < pageCount));
   const keep = Array.from({ length: pageCount }, (_, i) => i).filter((i) => !toDelete.has(i));
   if (!keep.length) throw new Error('Tidak dapat menghapus semua halaman dari dokumen.');
-  const out = await PDFDocument.create();
-  const pages = await out.copyPages(doc, keep);
-  pages.forEach((p) => out.addPage(p));
-  return (await out.save()).buffer as ArrayBuffer;
+  return extractPages(doc, keep);
 }
 
 /** Urutkan ulang halaman berdasarkan array index 0-based baru. */
@@ -939,5 +1095,5 @@ export async function mergePages(inputs: ArrayBuffer[], refs: PageRef[]): Promis
     const [copied] = await out.copyPages(doc, [ref.page]);
     out.addPage(copied);
   }
-  return (await out.save()).buffer as ArrayBuffer;
+  return savePagesOnly(out);
 }

@@ -16,7 +16,7 @@ import { CropPanel } from '../components/CropPanel';
 import { RotatePanel } from '../components/RotatePanel';
 import { MergePanel, type PageRef } from '../components/MergePanel';
 import { ToolOptionsForm, type Field } from '../components/ToolOptionsForm';
-import { pdfToImages, extractText } from '../lib/pdf-client';
+import { pdfToImages, extractText, assertSamePageOrder } from '../lib/pdf-client';
 import { stampImage, jpegsToPdf, addTextLayer, type StampOptions } from '../engines/pdf-native';
 import { SignPanel } from '../components/SignPanel';
 import { FormFillPanel } from '../components/FormFillPanel';
@@ -113,6 +113,12 @@ export function ToolWorkspace() {
 
   const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit' && toolId !== 'image-watermark';
   const needsPageCount = toolId === 'split' || toolId === 'delete-pages' || toolId === 'reorder-pages' || toolId === 'rotate';
+  // Alat yang mengirim indeks halaman dari preview (pdf.js) ke mesin (pdf-lib): keduanya harus sepakat soal halaman.
+  const pageIndexed = needsPageCount || ['redact', 'merge', 'edit-text', 'crop', 'sign', 'ocr'].includes(toolId ?? '');
+  const checkPageOrder = async (list: SessionFile[]) => {
+    if (!pageIndexed) return;
+    try { for (const f of list) await assertSamePageOrder(f.bytes); } catch (e) { clearSession(list); throw e; }
+  };
 
   const choose = async (list: FileList | null) => {
     if (!list) return;
@@ -127,6 +133,7 @@ export function ToolWorkspace() {
     setStatus('Membaca file…');
     try {
       const next = await readSessionFiles(accepted);
+      await checkPageOrder(next);
       setFiles(next);
       setPageCount(0);
       setStatus('File siap. Jalankan proses atau atur opsi.');
@@ -148,6 +155,7 @@ export function ToolWorkspace() {
       // Batas 10 file / 120 MB berlaku untuk seluruh sesi, bukan per batch tambahan.
       validateCount([...files, ...accepted]);
       const more = await readSessionFiles(accepted);
+      await checkPageOrder(more);
       setFiles((prev) => [...prev, ...more]);
       setStatus(`${more.length} file ditambahkan. Total ${files.length + more.length} file.`);
     } catch (e) { setStatus(e instanceof Error ? e.message : 'File tidak valid.'); }

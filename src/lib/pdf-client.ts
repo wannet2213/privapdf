@@ -1,4 +1,5 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import { PDFDocument, type PDFRef } from 'pdf-lib';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -18,6 +19,36 @@ export interface PdfToImageOptions {
 export interface ExtractTextResult {
   text: string;
   pages: number;
+}
+
+export const PAGE_ORDER_MISMATCH = 'Susunan halaman PDF ini rusak: halaman yang ditampilkan tidak sama dengan yang akan diproses, jadi file ditolak agar tidak salah halaman. Simpan ulang PDF-nya (mis. Cetak → Simpan sebagai PDF), lalu coba lagi.';
+
+/**
+ * Preview (pdf.js) dan mesin (pdf-lib) membaca page tree dengan aturan berbeda: pdf.js memakai /Count
+ * dan menganggap node tanpa /Kids sebagai halaman, pdf-lib hanya mengenal /Type /Page. Pada page tree
+ * cacat, halaman ke-i di preview bisa bukan halaman ke-i yang diproses — Sensor lalu menempel kotak di
+ * halaman lain dan halaman yang ditandai lolos sebagai teks. Bandingkan ref tiap halaman, bukan jumlahnya:
+ * jumlah bisa sama dengan urutan berbeda.
+ */
+export async function assertSamePageOrder(bytes: ArrayBuffer): Promise<void> {
+  let refs: PDFRef[];
+  let doc: Awaited<ReturnType<typeof getDocument>['promise']>;
+  try {
+    refs = (await PDFDocument.load(bytes, { updateMetadata: false })).getPages().map((p) => p.ref);
+    doc = await getDocument({ data: bytes.slice(0), isEvalSupported: false }).promise;
+  } catch {
+    return; // Terkunci/rusak: panel dan mesin melaporkan galatnya sendiri, tanpa ada halaman yang bisa dipilih.
+  }
+  try {
+    let same = doc.numPages === refs.length;
+    for (let i = 0; same && i < refs.length; i++) {
+      const ref = (await doc.getPage(i + 1).catch(() => undefined))?.ref;
+      same = ref?.num === refs[i].objectNumber && ref.gen === refs[i].generationNumber;
+    }
+    if (!same) throw new Error(PAGE_ORDER_MISMATCH);
+  } finally {
+    void doc.destroy();
+  }
 }
 
 export async function loadPdfDoc(bytes: ArrayBuffer) {
