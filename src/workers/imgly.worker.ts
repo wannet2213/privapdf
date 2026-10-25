@@ -6,6 +6,7 @@
  */
 import { removeBackground } from '@imgly/background-removal';
 import * as ort from 'onnxruntime-web';
+import { tr } from '../lib/i18n';
 
 // imgly menyetel numThreads dari crossOriginIsolated (>1 di situs dengan
 // COOP/COEP) — jalur pthread ORT di nested worker bisa deadlock saat sesi
@@ -41,9 +42,9 @@ self.onmessage = async (e: MessageEvent) => {
         if (key.startsWith('fetch:')) {
           const name = key.slice(6).split('/').pop() || 'model';
           const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-          post({ type: 'status', message: `Mengunduh ${name}… ${pct}%` });
+          post({ type: 'status', message: `${tr('Mengunduh', 'Downloading')} ${name}… ${pct}%` });
         } else if (key.startsWith('compute:')) {
-          post({ type: 'status', message: 'Menghitung segmentasi dengan model imgly…' });
+          post({ type: 'status', message: tr('Menghitung segmentasi dengan model imgly…', 'Computing segmentation with the imgly model…') });
         }
       },
     });

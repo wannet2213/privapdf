@@ -54,5 +54,5 @@ export default defineConfig({
   // lewat dynamic import — jangan di-prebundle, otherwise Vite menambahkan
   // ?import dan menolak file public.
   optimizeDeps: { exclude: ['onnxruntime-web'] },
-  test: { environment: 'jsdom', globals: true },
+  test: { environment: 'jsdom', globals: true, setupFiles: ['tests/setup.ts'] },
 });

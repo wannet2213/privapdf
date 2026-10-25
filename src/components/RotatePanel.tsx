@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -106,9 +107,9 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
 
   const label = (a: number) => {
     switch (a) {
-      case 90: return '90° kanan';
+      case 90: return tr('90° kanan', '90° right');
       case 180: return '180°';
-      case 270: return '90° kiri';
+      case 270: return tr('90° kiri', '90° left');
       default: return '0°';
     }
   };
@@ -124,49 +125,49 @@ export function RotatePanel({ bytes, pageCount, onProcess, busy }: RotatePanelPr
             ref={canvasRef}
             className="annotate-canvas-base rotate-canvas"
           />
-          {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(currentPage)} aria-label="Lihat halaman full">⤢</button>}
+          {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(currentPage)} aria-label={tr('Lihat halaman full', 'View full page')}>⤢</button>}
           {!loading && (
             <span className="rotate-degree-badge">{label(currentRot)}</span>
           )}
-          {loading && <div className="annotate-loading">Memuat halaman…</div>}
+          {loading && <div className="annotate-loading">{tr('Memuat halaman…', 'Loading page…')}</div>}
         </div>
 
         {pageCount > 1 && (
           <div className="crop-page-nav">
-            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label="Halaman sebelumnya">‹</button>
+            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label={tr('Halaman sebelumnya', 'Previous page')}>‹</button>
             <span>
-              Halaman {currentPage + 1} / {pageCount}
-              {(rotations[currentPage] ?? 0) % 360 !== 0 && <b className="rotate-page-mark"> · diputar {label(currentRot)}</b>}
+              {tr('Halaman', 'Page')} {currentPage + 1} / {pageCount}
+              {(rotations[currentPage] ?? 0) % 360 !== 0 && <b className="rotate-page-mark"> · {tr('diputar', 'rotated')} {label(currentRot)}</b>}
             </span>
-            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label="Halaman berikutnya">›</button>
+            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label={tr('Halaman berikutnya', 'Next page')}>›</button>
           </div>
         )}
 
         <p className="annotate-caption">
-          Halaman {currentPage + 1} dari {pageCount} · arah putaran saat ini: {label(currentRot)}
-          {rotatedCount > 0 && ` · ${rotatedCount} halaman akan diputar`}
+          {tr(`Halaman ${currentPage + 1} dari ${pageCount} · arah putaran saat ini: `, `Page ${currentPage + 1} of ${pageCount} · current rotation: `)}{label(currentRot)}
+          {rotatedCount > 0 && tr(` · ${rotatedCount} halaman akan diputar`, ` · ${rotatedCount} page(s) will be rotated`)}
         </p>
       </div>
 
       <div className="rotate-controls">
         <button type="button" className="rotate-btn" onClick={() => setRotation(-90)} disabled={busy}>
-          <span className="rotate-icon">↺</span> 90° kiri
+          <span className="rotate-icon">↺</span> {tr('90° kiri', '90° left')}
         </button>
         <button type="button" className="rotate-btn" onClick={() => setRotation(180)} disabled={busy}>
           <span className="rotate-icon">⇅</span> 180°
         </button>
         <button type="button" className="rotate-btn" onClick={() => setRotation(90)} disabled={busy}>
-          <span className="rotate-icon">↻</span> 90° kanan
+          <span className="rotate-icon">↻</span> {tr('90° kanan', '90° right')}
         </button>
       </div>
       <div className="rotate-controls secondary">
-        <button type="button" className="ghost-btn" onClick={resetPage} disabled={busy}>Reset halaman ini</button>
-        <button type="button" className="ghost-btn" onClick={resetAll} disabled={busy || rotatedCount === 0}>Reset semua</button>
+        <button type="button" className="ghost-btn" onClick={resetPage} disabled={busy}>{tr('Reset halaman ini', 'Reset this page')}</button>
+        <button type="button" className="ghost-btn" onClick={resetAll} disabled={busy || rotatedCount === 0}>{tr('Reset semua', 'Reset all')}</button>
       </div>
 
-      <p className="split-hint">Pratinjau berputar real-time saat tombol arah ditekan. Putaran bisa berbeda tiap halaman, navigasi dengan ‹ ›. Diterapkan ke sudut halaman yang sudah ada (relatif).</p>
+      <p className="split-hint">{tr('Pratinjau berputar real-time saat tombol arah ditekan. Putaran bisa berbeda tiap halaman, navigasi dengan ‹ ›. Diterapkan ke sudut halaman yang sudah ada (relatif).', 'The preview rotates live as you press a direction. Each page can have its own rotation, navigate with ‹ ›. Applied on top of the existing page angle (relative).')}</p>
       <button className="primary" onClick={submit} disabled={busy || loading || rotatedCount === 0}>
-        {busy ? 'Memproses…' : rotatedCount > 0 ? `Putar ${rotatedCount} halaman` : 'Putar halaman'}
+        {busy ? tr('Memproses…', 'Processing…') : rotatedCount > 0 ? tr(`Putar ${rotatedCount} halaman`, `Rotate ${rotatedCount} page(s)`) : tr('Putar halaman', 'Rotate pages')}
       </button>
       {viewing !== null && (
         <PageViewer bytes={bytes} pageNumber={viewing} totalPages={pageCount} onClose={() => setViewing(null)} onPageChange={setViewing} />

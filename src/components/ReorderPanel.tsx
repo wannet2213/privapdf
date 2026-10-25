@@ -1,5 +1,6 @@
 import { PdfPreview } from '../lib/pdf-preview';
 import { reorder } from '../lib/reorder';
+import { tr } from '../lib/i18n';
 
 interface ReorderPanelProps {
   bytes: ArrayBuffer;
@@ -13,20 +14,20 @@ interface ReorderPanelProps {
 export function ReorderPanel({ bytes, pageCount, order, onOrderChange, onProcess, busy }: ReorderPanelProps) {
   // Gunakan origIdx sebagai page agar thumbnail yang benar dirender di posisi yang benar.
   // Saat order berubah, pages array berubah urutan sehingga thumbnail visual ikut berpindah.
-  const pages = order.map((origIdx) => ({ page: origIdx, label: `Halaman ${origIdx + 1}` }));
+  const pages = order.map((origIdx) => ({ page: origIdx, label: tr(`Halaman ${origIdx + 1}`, `Page ${origIdx + 1}`) }));
   const selected = Array.from({ length: pageCount }, (_, i) => i);
   const handleMove = (from: number, to: number) => onOrderChange(reorder(order, from, to));
 
   return (
     <div className="split-panel">
       <div className="preview-heading">
-        <span>Susun ulang halaman</span>
-        <small>Tahan lalu seret untuk mengubah urutan</small>
+        <span>{tr('Susun ulang halaman', 'Rearrange pages')}</span>
+        <small>{tr('Tahan lalu seret untuk mengubah urutan', 'Press and drag to change the order')}</small>
       </div>
       <PdfPreview bytes={bytes} pages={pages} selected={selected} onToggle={() => {}} onMove={handleMove} />
-      <p className="split-hint">Urutan: {order.map((p) => p + 1).join(' → ')}</p>
+      <p className="split-hint">{tr('Urutan', 'Order')}: {order.map((p) => p + 1).join(' → ')}</p>
       <button className="primary" onClick={onProcess} disabled={busy}>
-        {busy ? 'Memproses…' : 'Simpan urutan baru'}
+        {busy ? tr('Memproses…', 'Processing…') : tr('Simpan urutan baru', 'Save new order')}
       </button>
     </div>
   );

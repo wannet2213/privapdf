@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Box } from '../lib/crop-box';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -116,31 +117,31 @@ export function RedactPanel({ bytes, onProcess, busy }: RedactPanelProps) {
             <div ref={layerRef} className="redact-layer" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => setDraft(null)}>
               {pageBoxes.map((b, i) => (
                 <div key={i} className="redact-box" style={place(b)}>
-                  <button type="button" className="redact-remove" onClick={() => removeBox(i)} aria-label={`Hapus kotak sensor ${i + 1}`}>✕</button>
+                  <button type="button" className="redact-remove" onClick={() => removeBox(i)} aria-label={tr(`Hapus kotak sensor ${i + 1}`, `Remove redaction box ${i + 1}`)}>✕</button>
                 </div>
               ))}
               {draft && <div className="redact-box is-draft" style={place(draft.box)} />}
             </div>
           )}
-          {loading && <div className="annotate-loading">Memuat halaman…</div>}
+          {loading && <div className="annotate-loading">{tr('Memuat halaman…', 'Loading page…')}</div>}
         </div>
 
         {pageCount > 1 && (
           <div className="crop-page-nav">
-            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label="Halaman sebelumnya">‹</button>
-            <span>Halaman {currentPage + 1} / {pageCount}</span>
-            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label="Halaman berikutnya">›</button>
+            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label={tr('Halaman sebelumnya', 'Previous page')}>‹</button>
+            <span>{tr('Halaman', 'Page')} {currentPage + 1} / {pageCount}</span>
+            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label={tr('Halaman berikutnya', 'Next page')}>›</button>
           </div>
         )}
 
         <p className="annotate-caption">
-          {pageBoxes.length} kotak di halaman ini{pagesWithBoxes > 0 && ` · ${pagesWithBoxes} halaman akan disensor`}
+          {tr(`${pageBoxes.length} kotak di halaman ini`, `${pageBoxes.length} box(es) on this page`)}{pagesWithBoxes > 0 && tr(` · ${pagesWithBoxes} halaman akan disensor`, ` · ${pagesWithBoxes} page(s) will be redacted`)}
         </p>
       </div>
 
-      <p className="split-hint">Seret di halaman untuk menutup bagian yang ingin disensor. Halaman yang disensor diubah jadi gambar, jadi teks aslinya benar-benar hilang dan tidak bisa disalin. Tautan, komentar, formulir, dan bookmark tidak ikut ke hasil.</p>
+      <p className="split-hint">{tr('Seret di halaman untuk menutup bagian yang ingin disensor. Halaman yang disensor diubah jadi gambar, jadi teks aslinya benar-benar hilang dan tidak bisa disalin. Tautan, komentar, formulir, dan bookmark tidak ikut ke hasil.', 'Drag on the page to cover what you want redacted. Redacted pages are turned into images, so the original text is truly gone and cannot be copied. Links, comments, forms, and bookmarks are not carried into the result.')}</p>
       <button className="primary" onClick={() => onProcess(boxes)} disabled={busy || loading || pagesWithBoxes === 0}>
-        {busy ? 'Memproses…' : pagesWithBoxes > 0 ? `Sensor ${pagesWithBoxes} halaman` : 'Sensor halaman'}
+        {busy ? tr('Memproses…', 'Processing…') : pagesWithBoxes > 0 ? tr(`Sensor ${pagesWithBoxes} halaman`, `Redact ${pagesWithBoxes} page(s)`) : tr('Sensor halaman', 'Redact pages')}
       </button>
     </div>
   );

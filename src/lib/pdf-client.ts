@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import { PDFDocument, type PDFRef } from 'pdf-lib';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { tr } from './i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -21,7 +22,7 @@ export interface ExtractTextResult {
   pages: number;
 }
 
-export const PAGE_ORDER_MISMATCH = 'Susunan halaman PDF ini rusak: halaman yang ditampilkan tidak sama dengan yang akan diproses, jadi file ditolak agar tidak salah halaman. Simpan ulang PDF-nya (mis. Cetak → Simpan sebagai PDF), lalu coba lagi.';
+export const PAGE_ORDER_MISMATCH = tr('Susunan halaman PDF ini rusak: halaman yang ditampilkan tidak sama dengan yang akan diproses, jadi file ditolak agar tidak salah halaman. Simpan ulang PDF-nya (mis. Cetak → Simpan sebagai PDF), lalu coba lagi.', 'This PDF page tree is broken: the pages shown differ from the pages that would be processed, so the file is rejected to avoid working on the wrong page. Re-save the PDF (e.g. Print → Save as PDF), then try again.');
 
 /**
  * Preview (pdf.js) dan mesin (pdf-lib) membaca page tree dengan aturan berbeda: pdf.js memakai /Count
@@ -52,9 +53,9 @@ export async function assertSamePageOrder(bytes: ArrayBuffer): Promise<void> {
 }
 
 export async function loadPdfDoc(bytes: ArrayBuffer) {
-  if (bytes.byteLength > MAX_RENDER_BYTES) throw new Error('File terlalu besar untuk dirender di browser.');
+  if (bytes.byteLength > MAX_RENDER_BYTES) throw new Error(tr('File terlalu besar untuk dirender di browser.', 'The file is too large to render in the browser.'));
   const doc = await getDocument({ data: bytes.slice(0) }).promise;
-  if (doc.numPages > MAX_RENDER_PAGES) throw new Error(`Terlalu banyak halaman (${doc.numPages}). Maksimal ${MAX_RENDER_PAGES}.`);
+  if (doc.numPages > MAX_RENDER_PAGES) throw new Error(tr(`Terlalu banyak halaman (${doc.numPages}). Maksimal ${MAX_RENDER_PAGES}.`, `Too many pages (${doc.numPages}). Maximum ${MAX_RENDER_PAGES}.`));
   return doc;
 }
 
@@ -84,7 +85,7 @@ export async function pdfToImages(
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas 2D context tidak tersedia di browser ini.');
+    if (!ctx) throw new Error(tr('Canvas 2D context tidak tersedia di browser ini.', 'Canvas 2D context is not available in this browser.'));
     // intent 'print' tidak memakai requestAnimationFrame, yang berhenti di tab latar belakang.
     // Konsekuensinya tampilan mengikuti versi cetak: anotasi tanpa flag Print tidak ikut,
     // anotasi khusus cetak (NoView+Print) ikut. Pratinjau Sensor PDF memakai intent yang sama.
@@ -94,13 +95,13 @@ export async function pdfToImages(
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, `image/${format}`, quality));
     canvas.width = 0; canvas.height = 0;
     page.cleanup();
-    if (!blob) throw new Error(`Halaman ${pageNum} terlalu besar untuk dirender pada resolusi ini. Coba resolusi lebih rendah.`);
+    if (!blob) throw new Error(tr(`Halaman ${pageNum} terlalu besar untuk dirender pada resolusi ini. Coba resolusi lebih rendah.`, `Page ${pageNum} is too large to render at this resolution. Try a lower resolution.`));
     results.push(blob);
     onProgress?.(i + 1, total);
   }
 
   await doc.destroy();
-  if (!results.length) throw new Error('Tidak ada halaman yang dapat dirender.');
+  if (!results.length) throw new Error(tr('Tidak ada halaman yang dapat dirender.', 'No pages could be rendered.'));
   return results;
 }
 

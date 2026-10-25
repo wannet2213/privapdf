@@ -6,6 +6,7 @@ import {
   clampCropBox, boxFromMargins, marginsFromBox, presetRatio, resizeCropBox,
   type Box, type CropHandle, type Margins,
 } from '../lib/crop-box';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -18,7 +19,7 @@ interface CropPanelProps {
 const PREVIEW_SCALE = 1.0;
 
 const PRESETS: { id: string; label: string; w?: number; h?: number }[] = [
-  { id: 'free', label: 'Bebas' },
+  { id: 'free', label: tr('Bebas', 'Free') },
   { id: 'a4', label: 'A4', w: 595, h: 842 },
   { id: 'letter', label: 'Letter', w: 612, h: 792 },
 ];
@@ -179,8 +180,8 @@ export function CropPanel({ bytes, onProcess, busy }: CropPanelProps) {
           <button key={p.id} className={`ghost-btn ${activePreset === p.id ? 'is-active' : ''}`} onClick={() => applyPreset(p.id)}>{p.label}</button>
         ))}
         {pageCount > 1 && (
-          <button type="button" className="ghost-btn" onClick={applyToAll} title="Salin pemotongan halaman ini ke semua halaman">
-            Terapkan ke semua
+          <button type="button" className="ghost-btn" onClick={applyToAll} title={tr('Salin pemotongan halaman ini ke semua halaman', 'Copy this page crop to every page')}>
+            {tr('Terapkan ke semua', 'Apply to all')}
           </button>
         )}
       </div>
@@ -188,7 +189,7 @@ export function CropPanel({ bytes, onProcess, busy }: CropPanelProps) {
       <div className="annotate-preview-wrap">
         <div ref={wrapRef} className="crop-canvas-wrap" style={{ width: pageSize.width || 'auto' }}>
           <canvas ref={canvasRef} className="annotate-canvas-base" />
-          {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(currentPage)} aria-label="Lihat halaman full">⤢</button>}
+          {!loading && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(currentPage)} aria-label={tr('Lihat halaman full', 'View full page')}>⤢</button>}
           {!loading && pageSize.width > 0 && (
             <div
               className="crop-shade"
@@ -209,26 +210,26 @@ export function CropPanel({ bytes, onProcess, busy }: CropPanelProps) {
               ))}
             </div>
           )}
-          {loading && <div className="annotate-loading">Memuat halaman…</div>}
+          {loading && <div className="annotate-loading">{tr('Memuat halaman…', 'Loading page…')}</div>}
         </div>
 
         {pageCount > 1 && (
           <div className="crop-page-nav">
-            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label="Halaman sebelumnya">‹</button>
-            <span>Halaman {currentPage + 1} / {pageCount}</span>
-            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label="Halaman berikutnya">›</button>
+            <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label={tr('Halaman sebelumnya', 'Previous page')}>‹</button>
+            <span>{tr('Halaman', 'Page')} {currentPage + 1} / {pageCount}</span>
+            <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label={tr('Halaman berikutnya', 'Next page')}>›</button>
           </div>
         )}
 
         <p className="annotate-caption">
-          Halaman {currentPage + 1} dari {pageCount} · {isFull ? 'Tanpa pemotongan' : `${Math.round(currentBox.w)} × ${Math.round(currentBox.h)} pt`}
-          {croppedCount > 0 && ` · ${croppedCount} halaman akan dipotong`}
+          {tr(`Halaman ${currentPage + 1} dari ${pageCount}`, `Page ${currentPage + 1} of ${pageCount}`)} · {isFull ? tr('Tanpa pemotongan', 'No crop') : `${Math.round(currentBox.w)} × ${Math.round(currentBox.h)} pt`}
+          {croppedCount > 0 && tr(` · ${croppedCount} halaman akan dipotong`, ` · ${croppedCount} page(s) will be cropped`)}
         </p>
       </div>
 
-      <p className="split-hint">Setiap halaman bisa dipotong berbeda, gunakan ‹ › untuk pindah halaman, atau "Terapkan ke semua" untuk menyalin pemotongan halaman ini. {ratio ? 'Rasio preset dikunci saat mengubah ukuran. ' : ''}Area gelap akan dipotong.</p>
+      <p className="split-hint">{tr('Setiap halaman bisa dipotong berbeda, gunakan ‹ › untuk pindah halaman, atau "Terapkan ke semua" untuk menyalin pemotongan halaman ini. ', 'Each page can be cropped differently, use ‹ › to switch pages, or "Apply to all" to copy this page crop. ')}{ratio ? tr('Rasio preset dikunci saat mengubah ukuran. ', 'The preset ratio stays locked while resizing. ') : ''}{tr('Area gelap akan dipotong.', 'The dark area will be cut off.')}</p>
       <button className="primary" onClick={submit} disabled={busy || loading || croppedCount === 0}>
-        {busy ? 'Memproses…' : croppedCount > 0 ? `Potong ${croppedCount} halaman` : 'Potong halaman'}
+        {busy ? tr('Memproses…', 'Processing…') : croppedCount > 0 ? tr(`Potong ${croppedCount} halaman`, `Crop ${croppedCount} page(s)`) : tr('Potong halaman', 'Crop pages')}
       </button>
       {viewing !== null && (
         <PageViewer

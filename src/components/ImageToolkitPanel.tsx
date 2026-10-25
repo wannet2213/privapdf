@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { convertImage, withFormatExt, type ImageFormat } from '../lib/image-toolkit';
 import type { SessionFile } from '../lib/file-session';
+import { tr } from '../lib/i18n';
 
 const FORMATS: { value: ImageFormat; label: string }[] = [
   { value: 'image/jpeg', label: 'JPEG' },
@@ -46,7 +47,7 @@ export function ImageToolkitPanel({ files, onProcess }: ImageToolkitPanelProps) 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        setProgress(`Mengonversi ${i + 1}/${files.length}: ${file.name}`);
+        setProgress(tr(`Mengonversi ${i + 1}/${files.length}: ${file.name}`, `Converting ${i + 1}/${files.length}: ${file.name}`));
         const result = await convertImage(file.bytes, { format, quality: quality / 100, maxWidth });
         // Nama mengikuti format aktual — bila browser tak mendukung enkoding
         // WebP dan jatuh ke PNG, file otomatis bernama .png.
@@ -56,7 +57,7 @@ export function ImageToolkitPanel({ files, onProcess }: ImageToolkitPanelProps) 
       setResults(summary);
       onProcess(outputs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Konversi gambar gagal.');
+      setError(e instanceof Error ? e.message : tr('Konversi gambar gagal.', 'Image conversion failed.'));
     }
     setConverting(false);
     setProgress('');
@@ -69,30 +70,30 @@ export function ImageToolkitPanel({ files, onProcess }: ImageToolkitPanelProps) 
   return (
     <div className="split-panel">
       <div className="preview-heading">
-        <span>{files.length} gambar</span>
-        <small>Konversi + kompresi + resize massal. Re-encode menghapus EXIF (GPS, info kamera).</small>
+        <span>{tr(`${files.length} gambar`, `${files.length} image(s)`)}</span>
+        <small>{tr('Konversi + kompresi + resize massal. Re-encode menghapus EXIF (GPS, info kamera).', 'Batch convert + compress + resize. Re-encoding strips EXIF (GPS, camera info).')}</small>
       </div>
       <div className="tool-form">
         <div className="tool-form-field">
-          <label className="tool-form-label" htmlFor="img-format">Format keluaran</label>
+          <label className="tool-form-label" htmlFor="img-format">{tr('Format keluaran', 'Output format')}</label>
           <select id="img-format" className="tool-form-input" value={format} disabled={converting} onChange={(e) => setFormat(e.target.value as ImageFormat)}>
             {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
         <div className="tool-form-field">
           <label className="tool-form-label" htmlFor="img-quality">
-            Kualitas: {quality}%{format === 'image/png' && ' (diabaikan — PNG lossless)'}
+            {tr('Kualitas', 'Quality')}: {quality}%{format === 'image/png' && tr(' (diabaikan — PNG lossless)', ' (ignored — PNG is lossless)')}
           </label>
           <input id="img-quality" type="range" min={10} max={100} step={1} value={quality} disabled={converting || format === 'image/png'} onChange={(e) => setQuality(Number(e.target.value))} />
         </div>
         <div className="tool-form-field">
-          <label className="tool-form-label" htmlFor="img-maxw">Lebar maksimum (px, 0 = tetap)</label>
+          <label className="tool-form-label" htmlFor="img-maxw">{tr('Lebar maksimum (px, 0 = tetap)', 'Max width (px, 0 = unchanged)')}</label>
           <input id="img-maxw" type="number" min={0} step={50} className="tool-form-input" value={maxWidth} disabled={converting} onChange={(e) => setMaxWidth(Math.max(0, Number(e.target.value) || 0))} />
         </div>
       </div>
       {error && <div className="preview-error" role="alert">{error}</div>}
       <button className="primary" onClick={convertAll} disabled={converting}>
-        {converting ? progress || 'Memproses…' : `Konversi ${files.length} gambar →`}
+        {converting ? progress || tr('Memproses…', 'Processing…') : tr(`Konversi ${files.length} gambar →`, `Convert ${files.length} image(s) →`)}
       </button>
       {results && (
         <div className="image-results">
@@ -104,7 +105,7 @@ export function ImageToolkitPanel({ files, onProcess }: ImageToolkitPanelProps) 
             </div>
           ))}
           <div className="image-result-total">
-            Total: {fmtKB(totalIn)} → {fmtKB(totalOut)}{saved > 0 ? ` (hemat ${saved}%)` : saved < 0 ? ` (+${-saved}% lebih besar)` : ''}
+            Total: {fmtKB(totalIn)} → {fmtKB(totalOut)}{saved > 0 ? tr(` (hemat ${saved}%)`, ` (${saved}% saved)`) : saved < 0 ? tr(` (+${-saved}% lebih besar)`, ` (+${-saved}% larger)`) : ''}
           </div>
         </div>
       )}

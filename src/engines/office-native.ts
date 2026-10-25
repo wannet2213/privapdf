@@ -1,4 +1,5 @@
 import { WorkerBrowserConverter, createWasmPaths } from '@matbee/libreoffice-converter/browser';
+import { tr } from '../lib/i18n';
 
 type LoadProgress = { phase: string; percent: number; message: string; bytesLoaded?: number; bytesTotal?: number };
 type Progress = (percent: number, status: string) => void;
@@ -9,15 +10,15 @@ let converterPromise: Promise<WorkerBrowserConverter> | undefined;
 let progressHandler: Progress | undefined;
 
 const PHASE_LABEL: Record<string, string> = {
-  'download-wasm': 'Mengunduh mesin konversi (WASM)',
-  'download-data': 'Mengunduh data sistem berkas',
-  compile: 'Mengompilasi mesin WASM',
-  filesystem: 'Menyiapkan sistem berkas virtual',
-  'lok-init': 'Menyiapkan LibreOffice',
-  loading: 'Memuat mesin WASM',
-  initializing: 'Inisialisasi',
-  converting: 'Mengonversi dokumen',
-  complete: 'Menyelesaikan',
+  'download-wasm': tr('Mengunduh mesin konversi (WASM)', 'Downloading the conversion engine (WASM)'),
+  'download-data': tr('Mengunduh data sistem berkas', 'Downloading file system data'),
+  compile: tr('Mengompilasi mesin WASM', 'Compiling the WASM engine'),
+  filesystem: tr('Menyiapkan sistem berkas virtual', 'Preparing the virtual file system'),
+  'lok-init': tr('Menyiapkan LibreOffice', 'Preparing LibreOffice'),
+  loading: tr('Memuat mesin WASM', 'Loading the WASM engine'),
+  initializing: tr('Inisialisasi', 'Initializing'),
+  converting: tr('Mengonversi dokumen', 'Converting the document'),
+  complete: tr('Menyelesaikan', 'Finishing'),
 };
 
 /** Fase pustaka → kalimat aktivitas yang ditampilkan pengguna. */
@@ -69,7 +70,7 @@ export async function officeToPdf(input: ArrayBuffer, filename: string, onProgre
   // dan inisialisasi menggantung tanpa pesan (pernah tampak "macet di 55%").
   // Konteks tanpa isolasi: webview/pratinjau tersemat, atau situs tanpa COOP/COEP.
   if (typeof crossOriginIsolated !== 'boolean' || !crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-    throw new Error('Browser ini tidak mengizinkan SharedArrayBuffer (crossOriginIsolated=false) — dibutuhkan LibreOffice WASM. Buka lewat browser biasa via HTTPS atau localhost, bukan webview/pratinjau tersemat.');
+    throw new Error(tr('Browser ini tidak mengizinkan SharedArrayBuffer (crossOriginIsolated=false) — dibutuhkan LibreOffice WASM. Buka lewat browser biasa via HTTPS atau localhost, bukan webview/pratinjau tersemat.', 'This browser does not allow SharedArrayBuffer (crossOriginIsolated=false), which LibreOffice WASM needs. Open it in a regular browser over HTTPS or localhost, not an embedded webview/preview.'));
   }
   const converter = await getConverter(onProgress);
   const result = await converter.convert(input, { outputFormat: 'pdf' }, filename);
@@ -84,4 +85,4 @@ export async function destroyOfficeConverter() {
   }
 }
 
-export function officeCapability() { const isolated = typeof crossOriginIsolated === 'boolean' && crossOriginIsolated; const wasm = typeof WebAssembly !== 'undefined'; const worker = typeof Worker !== 'undefined'; return { available: isolated && wasm && worker, reason: isolated && wasm && worker ? 'Runtime Office WASM siap dimuat.' : 'Memerlukan COOP/COEP, WebAssembly, dan Worker.' }; }
+export function officeCapability() { const isolated = typeof crossOriginIsolated === 'boolean' && crossOriginIsolated; const wasm = typeof WebAssembly !== 'undefined'; const worker = typeof Worker !== 'undefined'; return { available: isolated && wasm && worker, reason: isolated && wasm && worker ? tr('Runtime Office WASM siap dimuat.', 'Office WASM runtime is ready to load.') : tr('Memerlukan COOP/COEP, WebAssembly, dan Worker.', 'Requires COOP/COEP, WebAssembly, and Worker.') }; }

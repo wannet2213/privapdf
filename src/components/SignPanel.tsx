@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { stampImage, type StampOptions } from '../engines/pdf-native';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -9,9 +10,9 @@ const MAX_PREVIEW_BYTES = 100 * 1024 * 1024;
 const MAX_PREVIEW_PAGES = 200;
 const INK_COLORS = ['#1D2029', '#1D4ED8', '#D92E29'];
 const WIDTHS = [
-  { label: 'Tipis', px: 3 },
-  { label: 'Sedang', px: 5 },
-  { label: 'Tebal', px: 8 },
+  { label: tr('Tipis', 'Thin'), px: 3 },
+  { label: tr('Sedang', 'Medium'), px: 5 },
+  { label: tr('Tebal', 'Thick'), px: 8 },
 ];
 
 interface Stroke {
@@ -51,13 +52,13 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
   useEffect(() => {
     let cancelled = false;
     setError(undefined);
-    if (bytes.byteLength > MAX_PREVIEW_BYTES) { setError('PDF terlalu besar untuk pratinjau (maksimal 100 MB).'); return; }
+    if (bytes.byteLength > MAX_PREVIEW_BYTES) { setError(tr('PDF terlalu besar untuk pratinjau (maksimal 100 MB).', 'PDF is too large to preview (max 100 MB).')); return; }
     getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise.then((pdf) => {
       if (cancelled) { void pdf.destroy(); return; }
-      if (pdf.numPages > MAX_PREVIEW_PAGES) { setError(`Terlalu banyak halaman (${pdf.numPages}).`); void pdf.destroy(); return; }
+      if (pdf.numPages > MAX_PREVIEW_PAGES) { setError(tr(`Terlalu banyak halaman (${pdf.numPages}).`, `Too many pages (${pdf.numPages}).`)); void pdf.destroy(); return; }
       docRef.current = pdf;
       setPageCount(pdf.numPages);
-    }).catch(() => { if (!cancelled) setError('PDF tidak valid atau rusak.'); });
+    }).catch(() => { if (!cancelled) setError(tr('PDF tidak valid atau rusak.', 'The PDF is invalid or damaged.')); });
     return () => {
       cancelled = true;
       renderTaskRef.current?.cancel();
@@ -80,7 +81,7 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
         if (cancelled) { page.cleanup(); return; }
         const viewport = page.getViewport({ scale: 2 });
         const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Canvas 2D tidak tersedia di browser ini.');
+        if (!ctx) throw new Error(tr('Canvas 2D tidak tersedia di browser ini.', 'Canvas 2D is not available in this browser.'));
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const task = page.render({ canvasContext: ctx, viewport });
@@ -89,7 +90,7 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
         if (!cancelled) setRendering(false);
       } catch (reason) {
         if (!cancelled && !(reason instanceof Error && reason.name === 'RenderingCancelledException')) {
-          setError('Pratinjau gagal dirender.');
+          setError(tr('Pratinjau gagal dirender.', 'Failed to render the preview.'));
           setRendering(false);
         }
       }
@@ -149,7 +150,7 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
     const canvas = canvasRef.current;
     if (!canvas || !strokes.length) return;
     canvas.toBlob(async (blob) => {
-      if (!blob) { setError('Gagal membuat gambar tanda tangan.'); return; }
+      if (!blob) { setError(tr('Gagal membuat gambar tanda tangan.', 'Failed to create the signature image.')); return; }
       setStamp({ bytes: await blob.arrayBuffer(), type: 'png', src: canvas.toDataURL('image/png') });
     }, 'image/png');
   };
@@ -157,18 +158,18 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
   const onUpload = async (fileList: FileList | null) => {
     const file = fileList?.[0];
     if (!file) return;
-    if (file.type !== 'image/png' && file.type !== 'image/jpeg') { setError('Gunakan gambar PNG atau JPEG.'); return; }
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') { setError(tr('Gunakan gambar PNG atau JPEG.', 'Use a PNG or JPEG image.')); return; }
     try {
       const imageBytes = await file.arrayBuffer();
       const src = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('Gagal membaca gambar.'));
+        reader.onerror = () => reject(new Error(tr('Gagal membaca gambar.', 'Failed to read the image.')));
         reader.readAsDataURL(file);
       });
       setStamp({ bytes: imageBytes, type: file.type === 'image/png' ? 'png' : 'jpg', src });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal membaca gambar.');
+      setError(e instanceof Error ? e.message : tr('Gagal membaca gambar.', 'Failed to read the image.'));
     }
   };
 
@@ -209,28 +210,28 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
   return (
     <div className="split-panel">
       <div className="preview-heading">
-        <span>Tanda tangan / stempel</span>
-        <small>{stamp ? 'Seret gambar untuk memindahkan, atur ukuran, lalu tempel' : 'Gambar tanda tangan dengan tangan atau unggah gambar stempel'}</small>
+        <span>{tr('Tanda tangan / stempel', 'Signature / stamp')}</span>
+        <small>{stamp ? tr('Seret gambar untuk memindahkan, atur ukuran, lalu tempel', 'Drag the image to move it, set the size, then place it') : tr('Gambar tanda tangan dengan tangan atau unggah gambar stempel', 'Draw a signature by hand or upload a stamp image')}</small>
       </div>
 
       {!stamp ? (
         <>
           <div className="sign-toolbar">
-            <span className="tool-form-label">Tinta:</span>
+            <span className="tool-form-label">{tr('Tinta', 'Ink')}:</span>
             {INK_COLORS.map((c) => (
-              <button key={c} type="button" aria-label={`Warna tinta ${c}`} className={`sign-swatch ${ink === c ? 'is-active' : ''}`} style={{ background: c }} onClick={() => setInk(c)} />
+              <button key={c} type="button" aria-label={`${tr('Warna tinta', 'Ink color')} ${c}`} className={`sign-swatch ${ink === c ? 'is-active' : ''}`} style={{ background: c }} onClick={() => setInk(c)} />
             ))}
             {WIDTHS.map((w) => (
               <button key={w.px} type="button" className={`sign-width ${thickness === w.px ? 'is-active' : ''}`} onClick={() => setThickness(w.px)}>{w.label}</button>
             ))}
-            <button type="button" className="ghost-btn" onClick={() => setStrokes((prev) => prev.slice(0, -1))} disabled={!strokes.length}>Batal goresan</button>
-            <button type="button" className="ghost-btn" onClick={() => setStrokes([])} disabled={!strokes.length}>Bersihkan</button>
+            <button type="button" className="ghost-btn" onClick={() => setStrokes((prev) => prev.slice(0, -1))} disabled={!strokes.length}>{tr('Batal goresan', 'Undo stroke')}</button>
+            <button type="button" className="ghost-btn" onClick={() => setStrokes([])} disabled={!strokes.length}>{tr('Bersihkan', 'Clear')}</button>
           </div>
           <canvas ref={canvasRef} width={900} height={360} className="sign-canvas"
             onPointerDown={onDrawDown} onPointerMove={onDrawMove} onPointerUp={onDrawEnd} onPointerCancel={onDrawEnd} />
           <div className="sign-toolbar">
-            <button className="primary" onClick={useDrawing} disabled={!strokes.length}>Gunakan tanda tangan →</button>
-            <label className="ghost-btn sign-upload">Unggah gambar stempel (PNG/JPG)
+            <button className="primary" onClick={useDrawing} disabled={!strokes.length}>{tr('Gunakan tanda tangan →', 'Use signature →')}</button>
+            <label className="ghost-btn sign-upload">{tr('Unggah gambar stempel (PNG/JPG)', 'Upload stamp image (PNG/JPG)')}
               <input hidden type="file" accept="image/png,image/jpeg" onChange={(e) => { void onUpload(e.target.files); e.target.value = ''; }} />
             </label>
           </div>
@@ -239,33 +240,33 @@ export function SignPanel({ bytes, onProcess, busy }: SignPanelProps) {
         <>
           <div className="sign-toolbar">
             <button className="ghost-btn" onClick={() => setPageIndex((p) => Math.max(0, p - 1))} disabled={pageIndex === 0 || rendering}>←</button>
-            <span className="sign-page-indicator">Halaman {pageIndex + 1} / {pageCount}</span>
+            <span className="sign-page-indicator">{tr('Halaman', 'Page')} {pageIndex + 1} / {pageCount}</span>
             <button className="ghost-btn" onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))} disabled={pageIndex >= pageCount - 1 || rendering}>→</button>
             <label className="sign-all-label">
               <input type="checkbox" checked={allPages} onChange={(e) => setAllPages(e.target.checked)} />
-              Semua halaman
+              {tr('Semua halaman', 'All pages')}
             </label>
-            <button className="ghost-btn" onClick={() => setStamp(null)} disabled={busy}>Ganti gambar</button>
+            <button className="ghost-btn" onClick={() => setStamp(null)} disabled={busy}>{tr('Ganti gambar', 'Change image')}</button>
           </div>
           <div className="sign-stage" ref={stageRef}>
             <canvas ref={pageCanvasRef} className="sign-page" />
             {rendering && <span className="preview-loading" aria-hidden="true">…</span>}
-            <img src={stamp.src} alt="Tanda tangan / stempel" className="sign-overlay" draggable={false}
+            <img src={stamp.src} alt={tr('Tanda tangan / stempel', 'Signature / stamp')} className="sign-overlay" draggable={false}
               style={{ left: `${pos.xPct}%`, top: `${pos.yPct}%`, width: `${pos.widthPct}%`, opacity: pos.opacity }}
               onPointerDown={onOverlayDown} onPointerMove={onOverlayMove} onPointerUp={onOverlayUp} onPointerCancel={onOverlayUp} />
           </div>
           <div className="tool-form">
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="sign-size">Ukuran: {pos.widthPct}% lebar halaman</label>
+              <label className="tool-form-label" htmlFor="sign-size">{tr(`Ukuran: ${pos.widthPct}% lebar halaman`, `Size: ${pos.widthPct}% of page width`)}</label>
               <input id="sign-size" type="range" min={5} max={60} step={1} value={pos.widthPct} onChange={(e) => setPos((p) => ({ ...p, widthPct: Number(e.target.value) }))} />
             </div>
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="sign-opacity">Opasitas: {Math.round(pos.opacity * 100)}%</label>
+              <label className="tool-form-label" htmlFor="sign-opacity">{tr('Opasitas', 'Opacity')}: {Math.round(pos.opacity * 100)}%</label>
               <input id="sign-opacity" type="range" min={20} max={100} step={1} value={Math.round(pos.opacity * 100)} onChange={(e) => setPos((p) => ({ ...p, opacity: Number(e.target.value) / 100 }))} />
             </div>
           </div>
           <button className="primary" onClick={apply} disabled={busy || rendering}>
-            {busy ? 'Memproses…' : allPages ? `Tempel ke semua ${pageCount} halaman →` : `Tempel ke halaman ${pageIndex + 1} →`}
+            {busy ? tr('Memproses…', 'Processing…') : allPages ? tr(`Tempel ke semua ${pageCount} halaman →`, `Place on all ${pageCount} pages →`) : tr(`Tempel ke halaman ${pageIndex + 1} →`, `Place on page ${pageIndex + 1} →`)}
           </button>
         </>
       )}

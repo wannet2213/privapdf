@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from
 import { getDocument, GlobalWorkerOptions, Util, type PDFDocumentProxy, type PDFPageProxy, type PageViewport, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { TextEdit } from '../engines/edit-text';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -218,26 +219,26 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
 
   return (
     <div className="split-panel">
-      <div className={full ? 'edit-fullview' : 'edit-inline'} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? 'Edit teks — layar penuh' : undefined}>
+      <div className={full ? 'edit-fullview' : 'edit-inline'} role={full ? 'dialog' : undefined} aria-modal={full || undefined} aria-label={full ? tr('Edit teks — layar penuh', 'Edit text — full screen') : undefined}>
         <div className="crop-presets edit-toolbar">
           <button type="button" className={`ghost-btn ${adding ? 'is-active' : ''}`} aria-pressed={adding} onClick={() => setAdding((a) => !a)} disabled={loading}>
-            {adding ? 'Klik halaman untuk menaruh teks' : '＋ Tambah teks'}
+            {adding ? tr('Klik halaman untuk menaruh teks', 'Click the page to place text') : tr('＋ Tambah teks', '＋ Add text')}
           </button>
-          <button type="button" className="ghost-btn" onClick={() => setDrafts((prev) => prev.slice(0, -1))} disabled={!drafts.length}>Urungkan</button>
+          <button type="button" className="ghost-btn" onClick={() => setDrafts((prev) => prev.slice(0, -1))} disabled={!drafts.length}>{tr('Urungkan', 'Undo')}</button>
           {pageCount > 1 && (
             <span className="edit-page-nav">
-              <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label="Halaman sebelumnya">‹</button>
+              <button type="button" className="ghost-btn" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => Math.max(0, p - 1))} aria-label={tr('Halaman sebelumnya', 'Previous page')}>‹</button>
               <span>{currentPage + 1} / {pageCount}</span>
-              <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label="Halaman berikutnya">›</button>
+              <button type="button" className="ghost-btn" disabled={currentPage >= pageCount - 1} onClick={() => setCurrentPage((p) => Math.min(pageCount - 1, p + 1))} aria-label={tr('Halaman berikutnya', 'Next page')}>›</button>
             </span>
           )}
           {full && (
             <button type="button" className="primary edit-save" onClick={submit} disabled={busy || loading || !drafts.length || !!editor}>
-              {drafts.length ? `Simpan ${drafts.length} perubahan` : 'Simpan'}
+              {drafts.length ? tr(`Simpan ${drafts.length} perubahan`, `Save ${drafts.length} change(s)`) : tr('Simpan', 'Save')}
             </button>
           )}
           <button type="button" className="ghost-btn" onClick={() => setFull((f) => !f)} aria-pressed={full} disabled={loading}>
-            {full ? '✕ Tutup layar penuh' : '⤢ Layar penuh'}
+            {full ? tr('✕ Tutup layar penuh', '✕ Exit full screen') : tr('⤢ Layar penuh', '⤢ Full screen')}
           </button>
         </div>
 
@@ -251,7 +252,7 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
                   if (editor?.draft.page === currentPage && editor.draft.line === i) return null;
                   return (
                     <button key={i} type="button" className={`edit-line ${draft ? 'is-edited' : ''}`} style={lineBox(l.x, l.baseline, l.width, l.size, l.font)}
-                      onClick={() => openLine(i)} aria-label={`Edit baris: ${draft?.text ?? l.text}`} disabled={adding}>
+                      onClick={() => openLine(i)} aria-label={`${tr('Edit baris', 'Edit line')}: ${draft?.text ?? l.text}`} disabled={adding}>
                       {draft?.text}
                     </button>
                   );
@@ -259,7 +260,7 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
                 {pageDrafts.filter(({ d }) => d.line === undefined).map(({ d, index }) => (
                   editor?.index === index ? null : (
                     <button key={`n${index}`} type="button" className="edit-line is-edited is-new" style={lineBox(d.x, d.baseline, 0, d.size)}
-                      onClick={() => setEditor({ draft: d, index })} aria-label={`Edit teks baru: ${d.text}`}>{d.text}</button>
+                      onClick={() => setEditor({ draft: d, index })} aria-label={`${tr('Edit teks baru', 'Edit new text')}: ${d.text}`}>{d.text}</button>
                   )
                 ))}
                 {editor && editor.draft.page === currentPage && (
@@ -269,7 +270,7 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
                     rows={Math.max(1, editor.draft.text.split('\n').length)}
                     defaultValue={editor.draft.text}
                     autoFocus
-                    aria-label="Teks baris"
+                    aria-label={tr('Teks baris', 'Line text')}
                     onFocus={(e) => e.currentTarget.select()}
                     onBlur={(e) => commit(e.currentTarget.value)}
                     onKeyDown={(e) => {
@@ -280,19 +281,19 @@ export function EditTextPanel({ bytes, onProcess, busy }: EditTextPanelProps) {
                 )}
               </div>
             )}
-            {loading && <div className="annotate-loading">Memuat halaman…</div>}
+            {loading && <div className="annotate-loading">{tr('Memuat halaman…', 'Loading page…')}</div>}
           </div>
         </div>
 
         <p className="annotate-caption">
-          {!loading && !lines.length ? 'Halaman ini tidak berisi teks yang bisa diedit (hasil scan? jalankan OCR dulu)' : `${lines.length} baris teks`}
-          {drafts.length > 0 && ` · ${drafts.length} perubahan`}
+          {!loading && !lines.length ? tr('Halaman ini tidak berisi teks yang bisa diedit (hasil scan? jalankan OCR dulu)', 'This page has no editable text (a scan? run OCR first)') : tr(`${lines.length} baris teks`, `${lines.length} text line(s)`)}
+          {drafts.length > 0 && tr(` · ${drafts.length} perubahan`, ` · ${drafts.length} change(s)`)}
         </p>
       </div>
 
-      <p className="split-hint">Klik baris untuk mengubahnya (Enter simpan, Shift+Enter baris baru, Esc batal). Teks asli dihapus dari isi PDF, bukan sekadar ditutup, lalu teks baru ditulis dengan font, ukuran, warna, dan ketebalan aslinya bila memungkinkan. Setelah disimpan, hasilnya diperiksa ulang.</p>
+      <p className="split-hint">{tr('Klik baris untuk mengubahnya (Enter simpan, Shift+Enter baris baru, Esc batal). Teks asli dihapus dari isi PDF, bukan sekadar ditutup, lalu teks baru ditulis dengan font, ukuran, warna, dan ketebalan aslinya bila memungkinkan. Setelah disimpan, hasilnya diperiksa ulang.', 'Click a line to change it (Enter saves, Shift+Enter adds a line, Esc cancels). The original text is removed from the PDF content, not just covered up, then the new text is written with the original font, size, color, and weight where possible. After saving, the result is checked again.')}</p>
       <button className="primary" onClick={submit} disabled={busy || loading || !drafts.length || !!editor}>
-        {busy ? 'Memproses…' : drafts.length ? `Simpan ${drafts.length} perubahan` : 'Simpan perubahan'}
+        {busy ? tr('Memproses…', 'Processing…') : drafts.length ? tr(`Simpan ${drafts.length} perubahan`, `Save ${drafts.length} change(s)`) : tr('Simpan perubahan', 'Save changes')}
       </button>
     </div>
   );

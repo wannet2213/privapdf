@@ -6,6 +6,7 @@
  */
 import * as ort from 'onnxruntime-web';
 import { minMaxNormalize, U2NETP_INPUT_SIZE } from '../lib/bg-removal-core';
+import { tr } from '../lib/i18n';
 
 ort.env.wasm.wasmPaths = '/models/bg/';
 // Paksa 1 thread: jalur pthread ORT (numThreads > 1) di dalam nested worker
@@ -28,14 +29,14 @@ async function fetchModelWithProgress(onStatus: (m: string) => void): Promise<Ui
   const cache = typeof caches !== 'undefined' ? await caches.open(CACHE_NAME) : undefined;
   const cached = await cache?.match(url);
   if (cached) {
-    onStatus('Memuat model dari cache…');
+    onStatus(tr('Memuat model dari cache…', 'Loading the model from cache…'));
     return new Uint8Array(await cached.arrayBuffer());
   }
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Model tidak ditemukan (HTTP ${res.status}).`);
+  if (!res.ok) throw new Error(tr(`Model tidak ditemukan (HTTP ${res.status}).`, `Model not found (HTTP ${res.status}).`));
   const total = Number(res.headers.get('content-length')) || 0;
   const reader = res.body?.getReader();
-  if (!reader) throw new Error('Respons model tidak dapat dibaca.');
+  if (!reader) throw new Error(tr('Respons model tidak dapat dibaca.', 'The model response cannot be read.'));
   const chunks: Uint8Array[] = [];
   let received = 0;
   let lastPct = -1;
@@ -48,7 +49,7 @@ async function fetchModelWithProgress(onStatus: (m: string) => void): Promise<Ui
       const pct = Math.floor((received / total) * 100);
       if (pct !== lastPct && pct % 10 === 0) {
         lastPct = pct;
-        onStatus(`Mengunduh model u2netp (${(total / 1048576).toFixed(0)} MB)… ${pct}%`);
+        onStatus(tr(`Mengunduh model u2netp (${(total / 1048576).toFixed(0)} MB)… ${pct}%`, `Downloading the u2netp model (${(total / 1048576).toFixed(0)} MB)… ${pct}%`));
       }
     }
   }
@@ -66,21 +67,21 @@ async function getSession(onStatus: (m: string) => void): Promise<ort.InferenceS
   const cached = sessions.get(MODEL_FILE);
   if (cached) return cached;
   const bytes = await fetchModelWithProgress(onStatus);
-  onStatus('Menyiapkan sesi ONNX…');
+  onStatus(tr('Menyiapkan sesi ONNX…', 'Preparing the ONNX session…'));
   // WebGPU bila tersedia (init & inferensi lebih cepat), fallback WASM.
   const eps: string[] = [];
   if (typeof navigator !== 'undefined' && 'gpu' in navigator) eps.push('webgpu');
   eps.push('wasm');
   const session = await ort.InferenceSession.create(bytes, { executionProviders: eps });
   sessions.set(MODEL_FILE, session);
-  onStatus('Sesi siap. Menginferensi…');
+  onStatus(tr('Sesi siap. Menginferensi…', 'Session ready. Running inference…'));
   return session;
 }
 
 async function convert(data: ArrayBuffer, onStatus: (m: string) => void): Promise<Blob> {
   const size = U2NETP_INPUT_SIZE;
   const session = await getSession(onStatus);
-  onStatus('Menganalisis gambar dengan model AI…');
+  onStatus(tr('Menganalisis gambar dengan model AI…', 'Analyzing the image with the AI model…'));
 
   const bitmap = await createImageBitmap(new Blob([data]));
   const inputCanvas = new OffscreenCanvas(size, size);

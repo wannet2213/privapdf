@@ -27,16 +27,17 @@ import { EditTextPanel } from '../components/EditTextPanel';
 import type { TextEdit } from '../engines/edit-text';
 import { verifyTextEdits } from '../lib/edit-verify';
 import { preloadOfficeConverter } from '../engines/office-native';
+import { locale, tr } from '../lib/i18n';
 
 const STALL_AFTER_MS = 20000;
-const STALL_HINT = ' — tidak ada kemajuan ±20 detik. Bila terus berhenti, muat ulang halaman (refresh) lalu ulangi proses.';
+const STALL_HINT = tr(' — tidak ada kemajuan ±20 detik. Bila terus berhenti, muat ulang halaman (refresh) lalu ulangi proses.', ' — no progress for ±20 seconds. If it stays stuck, reload the page (refresh) and run it again.');
 
 const METADATA_FIELDS: Field[] = [
-  { name: 'title', label: 'Judul', type: 'text', placeholder: 'Judul dokumen' },
-  { name: 'author', label: 'Penulis', type: 'text', placeholder: 'Nama penulis' },
-  { name: 'subject', label: 'Subjek', type: 'text', placeholder: 'Topik dokumen' },
-  { name: 'keywords', label: 'Kata kunci', type: 'text', placeholder: 'pisahkan dengan koma' },
-  { name: 'creator', label: 'Pembuat', type: 'text', placeholder: 'Aplikasi pembuat' },
+  { name: 'title', label: tr('Judul', 'Title'), type: 'text', placeholder: tr('Judul dokumen', 'Document title') },
+  { name: 'author', label: tr('Penulis', 'Author'), type: 'text', placeholder: tr('Nama penulis', 'Author name') },
+  { name: 'subject', label: tr('Subjek', 'Subject'), type: 'text', placeholder: tr('Topik dokumen', 'Document topic') },
+  { name: 'keywords', label: tr('Kata kunci', 'Keywords'), type: 'text', placeholder: tr('pisahkan dengan koma', 'comma separated') },
+  { name: 'creator', label: tr('Pembuat', 'Creator'), type: 'text', placeholder: tr('Aplikasi pembuat', 'Creating application') },
 ];
 
 const FILE_COLORS = ['#E5322D', '#2FA36B', '#3B6FE0', '#8B5CF6', '#E88C30', '#0E9F9F'];
@@ -49,14 +50,14 @@ const UploadIcon = () => (
 
 const PDF_TO_IMAGE_FIELDS: Field[] = [
   { name: 'format', label: 'Format', type: 'select', default: 'png', options: [{ value: 'png', label: 'PNG' }, { value: 'jpeg', label: 'JPEG' }] },
-  { name: 'scale', label: 'Resolusi', type: 'select', default: '2', options: [{ value: '1', label: 'Standar (1x)' }, { value: '2', label: 'Tinggi (2x)' }, { value: '3', label: 'Maksimum (3x)' }] },
+  { name: 'scale', label: tr('Resolusi', 'Resolution'), type: 'select', default: '2', options: [{ value: '1', label: tr('Standar (1x)', 'Standard (1x)') }, { value: '2', label: tr('Tinggi (2x)', 'High (2x)') }, { value: '3', label: tr('Maksimum (3x)', 'Maximum (3x)') }] },
 ];
 
 const COMPRESS_FIELDS: Field[] = [
-  { name: 'level', label: 'Tingkat kompresi', type: 'select', default: 'ringan', options: [
-    { value: 'ringan', label: 'Ringan: rapikan struktur, teks tetap bisa dipilih' },
-    { value: 'sedang', label: 'Sedang: halaman jadi gambar 144 dpi' },
-    { value: 'kuat', label: 'Kuat: halaman jadi gambar 108 dpi, ukuran terkecil' },
+  { name: 'level', label: tr('Tingkat kompresi', 'Compression level'), type: 'select', default: 'ringan', options: [
+    { value: 'ringan', label: tr('Ringan: rapikan struktur, teks tetap bisa dipilih', 'Light: tidy the structure, text stays selectable') },
+    { value: 'sedang', label: tr('Sedang: halaman jadi gambar 144 dpi', 'Medium: pages become 144 dpi images') },
+    { value: 'kuat', label: tr('Kuat: halaman jadi gambar 108 dpi, ukuran terkecil', 'Strong: pages become 108 dpi images, smallest size') },
   ] },
 ];
 
@@ -67,17 +68,17 @@ const RASTER_LEVELS: Record<string, { scale: number; quality: number }> = {
 };
 
 const NUP_FIELDS: Field[] = [
-  { name: 'layout', label: 'Tata letak', type: 'select', default: '2', options: [
-    { value: '2', label: '2 halaman per lembar' },
-    { value: '4', label: '4 halaman per lembar' },
-    { value: 'booklet', label: 'Buklet (lipat tengah)' },
+  { name: 'layout', label: tr('Tata letak', 'Layout'), type: 'select', default: '2', options: [
+    { value: '2', label: tr('2 halaman per lembar', '2 pages per sheet') },
+    { value: '4', label: tr('4 halaman per lembar', '4 pages per sheet') },
+    { value: 'booklet', label: tr('Buklet (lipat tengah)', 'Booklet (center fold)') },
   ] },
 ];
 
 // Halaman tersensor dirender 144 dpi.
 const REDACT_SCALE = 2;
 
-const formatSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toLocaleString('id-ID', { maximumFractionDigits: 1 })} MB`;
+const formatSize = (n: number) => n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toLocaleString(locale, { maximumFractionDigits: 1 })} MB`;
 
 const SIMPLE_BUTTON_TOOLS = new Set(['image-to-pdf', 'office-to-pdf', 'sanitize']);
 
@@ -90,7 +91,7 @@ export function ToolWorkspace() {
   const addMoreRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<SessionFile[]>([]);
   const filesRef = useRef<SessionFile[]>([]);
-  const [status, setStatus] = useState('Pilih file dari perangkatmu.');
+  const [status, setStatus] = useState(tr('Pilih file dari perangkatmu.', 'Choose files from your device.'));
   const [phase, setPhase] = useState<Phase>();
   const [pageCount, setPageCount] = useState(0);
   const [reorderOrder, setReorderOrder] = useState<number[]>([]);
@@ -109,7 +110,7 @@ export function ToolWorkspace() {
   // Dipanggil sebelum early return di bawah: jumlah hook harus sama di setiap render.
   const mergeFiles = useMemo(() => files.map((f) => ({ bytes: f.bytes, name: f.name })), [files]);
 
-  if (!tool) return <div className="page"><h1>Tool tidak ditemukan.</h1></div>;
+  if (!tool) return <div className="page"><h1>{tr('Tool tidak ditemukan.', 'Tool not found.')}</h1></div>;
 
   const singleFile = toolId !== 'merge' && toolId !== 'image-toolkit' && toolId !== 'image-watermark';
   const needsPageCount = toolId === 'split' || toolId === 'delete-pages' || toolId === 'reorder-pages' || toolId === 'rotate';
@@ -125,46 +126,46 @@ export function ToolWorkspace() {
     setDropRejected(false);
     // Drop bisa membawa banyak file walau input-nya single — alat satu-file hanya ambil yang pertama.
     const accepted = filterSupportedFiles([...list], tool.accept).slice(0, singleFile ? 1 : undefined);
-    if (!accepted.length) { setDropRejected(true); setStatus('Format file tidak didukung.'); return; }
+    if (!accepted.length) { setDropRejected(true); setStatus(tr('Format file tidak didukung.', 'File format not supported.')); return; }
     // Mulai unduh aset LibreOffice WASM (~74 MB setelah gzip) sekarang, berbarengan
     // dengan pembacaan berkas — bukan menunggu tombol konversi ditekan.
     if (toolId === 'office-to-pdf') preloadOfficeConverter();
     setPhase(undefined);
-    setStatus('Membaca file…');
+    setStatus(tr('Membaca file…', 'Reading files…'));
     try {
       const next = await readSessionFiles(accepted);
       await checkPageOrder(next);
       setFiles(next);
       setPageCount(0);
-      setStatus('File siap. Jalankan proses atau atur opsi.');
+      setStatus(tr('File siap. Jalankan proses atau atur opsi.', 'Files ready. Run the process or adjust the options.'));
       if (needsPageCount && next[0]) {
         const doc = await PDFDocument.load(next[0].bytes);
         const count = doc.getPageCount();
         setPageCount(count);
         if (toolId === 'reorder-pages') setReorderOrder(Array.from({ length: count }, (_, i) => i));
       }
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'File tidak valid.'); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('File tidak valid.', 'Invalid file.')); }
   };
 
   const addFiles = async (list: FileList | null) => {
     if (!list || !list.length) return;
     const accepted = filterSupportedFiles([...list], tool.accept);
-    if (!accepted.length) { setStatus('Format file tidak didukung.'); return; }
-    setStatus('Menambahkan file…');
+    if (!accepted.length) { setStatus(tr('Format file tidak didukung.', 'File format not supported.')); return; }
+    setStatus(tr('Menambahkan file…', 'Adding files…'));
     try {
       // Batas 10 file / 120 MB berlaku untuk seluruh sesi, bukan per batch tambahan.
       validateCount([...files, ...accepted]);
       const more = await readSessionFiles(accepted);
       await checkPageOrder(more);
       setFiles((prev) => [...prev, ...more]);
-      setStatus(`${more.length} file ditambahkan. Total ${files.length + more.length} file.`);
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'File tidak valid.'); }
+      setStatus(tr(`${more.length} file ditambahkan. Total ${files.length + more.length} file.`, `${more.length} file(s) added. ${files.length + more.length} file(s) in total.`));
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('File tidak valid.', 'Invalid file.')); }
   };
 
   const removeFile = (index: number) => {
     setFiles((prev) => {
       const next = prev.filter((_, i) => i !== index);
-      setStatus(next.length ? `${next.length} file tersisa.` : 'Pilih file dari perangkatmu.');
+      setStatus(next.length ? tr(`${next.length} file tersisa.`, `${next.length} file(s) left.`) : tr('Pilih file dari perangkatmu.', 'Choose files from your device.'));
       return next;
     });
   };
@@ -181,7 +182,7 @@ export function ToolWorkspace() {
   };
 
   const runWorker = async (operation: string, inputs: ArrayBuffer[], options?: Record<string, unknown>, mime = 'application/pdf', defaultExt = 'pdf', zipOutput = false) => {
-    setBusy(true); setPhase(undefined); setStatus('Memproses…');
+    setBusy(true); setPhase(undefined); setStatus(tr('Memproses…', 'Processing…'));
     setStalled(false);
     lastProgressRef.current = Date.now();
     // Pemantau kemajuan: bila tidak ada event progres selama STALL_AFTER_MS,
@@ -196,19 +197,19 @@ export function ToolWorkspace() {
         setPhase(event.phase); outputNames = event.outputNames;
         lastProgressRef.current = Date.now();
         setStalled(false);
-        if (event.type === 'progress') setStatus(event.status ?? `${event.phase ?? 'Memproses'} · ${Math.round((event.progress || 0) * 100)}%`);
+        if (event.type === 'progress') setStatus(event.status ?? `${event.phase ?? tr('Memproses', 'Processing')} · ${Math.round((event.progress || 0) * 100)}%`);
       });
       const names = outputNames?.length ? outputNames : outputs.map((_, i) => `${files[0]?.name?.replace(/\.[^.]+$/, '') || 'document'}-${i + 1}.${defaultExt}`);
       if (zipOutput && outputs.length > 1) {
-        setStatus('Mengemas ZIP…');
+        setStatus(tr('Mengemas ZIP…', 'Packing ZIP…'));
         const zipName = `${files[0]?.name?.replace(/\.[^.]+$/, '') || 'document'}.zip`;
         downloadBlobs([await createZip(outputs.map((b, i) => ({ name: names[i], bytes: b })))], [zipName], 'application/zip');
-        setStatus(`Selesai. ${outputs.length} file dikemas dalam ${zipName}.`);
+        setStatus(tr(`Selesai. ${outputs.length} file dikemas dalam ${zipName}.`, `Done. ${outputs.length} files packed into ${zipName}.`));
       } else {
         downloadBlobs(outputs.map((b) => new Blob([b])), names, mime);
-        setStatus(`Selesai. ${outputs.length} file telah diunduh.`);
+        setStatus(tr(`Selesai. ${outputs.length} file telah diunduh.`, `Done. ${outputs.length} file(s) downloaded.`));
       }
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Pemrosesan gagal.'); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Pemrosesan gagal.', 'Processing failed.')); }
     clearInterval(stallTimer);
     setBusy(false); setStalled(false);
   };
@@ -232,13 +233,13 @@ export function ToolWorkspace() {
   const renderPdfToImages = async (values: Record<string, string | number>) => {
     const format = values.format as 'png' | 'jpeg';
     const scale = Number(values.scale) || 2;
-    setBusy(true); setStatus('Merender halaman…');
+    setBusy(true); setStatus(tr('Merender halaman…', 'Rendering pages…'));
     try {
-      const blobs = await pdfToImages(files[0].bytes, { format, scale }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
-      const names = blobs.map((_, i) => `${files[0].name.replace(/\.pdf$/i, '')}-hal-${i + 1}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+      const blobs = await pdfToImages(files[0].bytes, { format, scale }, (cur, total) => setStatus(tr(`Merender halaman ${cur}/${total}…`, `Rendering page ${cur}/${total}…`)));
+      const names = blobs.map((_, i) => `${files[0].name.replace(/\.pdf$/i, '')}-${tr('hal', 'page')}-${i + 1}.${format === 'jpeg' ? 'jpg' : 'png'}`);
       return { blobs, names, format };
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Render gagal.');
+      setStatus(e instanceof Error ? e.message : tr('Render gagal.', 'Rendering failed.'));
       setBusy(false);
       return null;
     }
@@ -248,7 +249,7 @@ export function ToolWorkspace() {
     const out = await renderPdfToImages(values);
     if (!out) return;
     downloadBlobs(out.blobs, out.names, `image/${out.format}`);
-    setStatus(`Selesai. ${out.blobs.length} gambar telah diunduh.`);
+    setStatus(tr(`Selesai. ${out.blobs.length} gambar telah diunduh.`, `Done. ${out.blobs.length} image(s) downloaded.`));
     setBusy(false);
   };
 
@@ -256,82 +257,82 @@ export function ToolWorkspace() {
     const out = await renderPdfToImages(values);
     if (!out) return;
     try {
-      setStatus('Mengemas ZIP…');
+      setStatus(tr('Mengemas ZIP…', 'Packing ZIP…'));
       const bytes = await Promise.all(out.blobs.map((b) => b.arrayBuffer()));
       const zip = await createZip(bytes.map((b, i) => ({ name: out.names[i], bytes: b })));
-      const zipName = `${files[0].name.replace(/\.pdf$/i, '')}-gambar.zip`;
+      const zipName = `${files[0].name.replace(/\.pdf$/i, '')}-${tr('gambar', 'images')}.zip`;
       downloadBlobs([zip], [zipName], 'application/zip');
-      setStatus(`Selesai. ${out.blobs.length} gambar dikemas dalam ${zipName}.`);
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal mengemas ZIP.'); }
+      setStatus(tr(`Selesai. ${out.blobs.length} gambar dikemas dalam ${zipName}.`, `Done. ${out.blobs.length} images packed into ${zipName}.`));
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Gagal mengemas ZIP.', 'Failed to pack ZIP.')); }
     setBusy(false);
   };
 
   const handleExtractText = async () => {
-    setBusy(true); setStatus('Mengekstrak teks…');
+    setBusy(true); setStatus(tr('Mengekstrak teks…', 'Extracting text…'));
     try {
-      const result = await extractText(files[0].bytes, (cur, total) => setStatus(`Mengekstrak halaman ${cur}/${total}…`));
+      const result = await extractText(files[0].bytes, (cur, total) => setStatus(tr(`Mengekstrak halaman ${cur}/${total}…`, `Extracting page ${cur}/${total}…`)));
       const blob = new Blob([result.text], { type: 'text/plain;charset=utf-8' });
       const names = [`${files[0].name.replace(/\.pdf$/i, '')}.txt`];
       downloadBlobs([blob], names, 'text/plain');
-      setStatus(`Selesai. ${result.pages} halaman diproses, ${result.text.length} karakter diekstrak.`);
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Ekstraksi gagal.'); }
+      setStatus(tr(`Selesai. ${result.pages} halaman diproses, ${result.text.length} karakter diekstrak.`, `Done. ${result.pages} page(s) processed, ${result.text.length} characters extracted.`));
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Ekstraksi gagal.', 'Extraction failed.')); }
     setBusy(false);
   };
 
   const handleSign = async (opts: StampOptions) => {
-    setBusy(true); setStatus('Menempelkan tanda tangan…');
+    setBusy(true); setStatus(tr('Menempelkan tanda tangan…', 'Placing signature…'));
     try {
       const out = await stampImage(files[0].bytes, opts);
-      downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-ditandatangani.pdf`], 'application/pdf');
-      setStatus('Selesai. PDF bertanda tangan telah diunduh.');
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal menempelkan tanda tangan.'); }
+      downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-${tr('ditandatangani', 'signed')}.pdf`], 'application/pdf');
+      setStatus(tr('Selesai. PDF bertanda tangan telah diunduh.', 'Done. Signed PDF downloaded.'));
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Gagal menempelkan tanda tangan.', 'Failed to place signature.')); }
     setBusy(false);
   };
 
   const downloadBuffer = (out: ArrayBuffer, suffix: string) => {
     downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-${suffix}.pdf`], 'application/pdf');
-    setStatus('Selesai. PDF telah diunduh.');
+    setStatus(tr('Selesai. PDF telah diunduh.', 'Done. PDF downloaded.'));
   };
 
   const handleFormDownload = (out: ArrayBuffer) => {
-    downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-terisi.pdf`], 'application/pdf');
-    setStatus('Selesai. PDF formulir terisi telah diunduh.');
+    downloadBlobs([new Blob([out])], [`${files[0].name.replace(/\.pdf$/i, '')}-${tr('terisi', 'filled')}.pdf`], 'application/pdf');
+    setStatus(tr('Selesai. PDF formulir terisi telah diunduh.', 'Done. Filled form PDF downloaded.'));
   };
 
   const handleCompress = async (values: Record<string, string | number>) => {
     const raster = RASTER_LEVELS[values.level];
     if (!raster) { runWorker('compress', [files[0].bytes]); return; }
     const input = files[0].bytes;
-    setBusy(true); setStatus('Merender halaman…');
+    setBusy(true); setStatus(tr('Merender halaman…', 'Rendering pages…'));
     try {
-      const blobs = await pdfToImages(input, { format: 'jpeg', ...raster }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
-      setStatus('Menyusun PDF…');
+      const blobs = await pdfToImages(input, { format: 'jpeg', ...raster }, (cur, total) => setStatus(tr(`Merender halaman ${cur}/${total}…`, `Rendering page ${cur}/${total}…`)));
+      setStatus(tr('Menyusun PDF…', 'Building PDF…'));
       const out = await jpegsToPdf(await Promise.all(blobs.map((b) => b.arrayBuffer())), raster.scale);
       const sizes = `${formatSize(input.byteLength)} → ${formatSize(out.byteLength)}`;
       // PDF teks/vektor justru membengkak saat dijadikan gambar — jangan unduhkan hasil yang lebih besar.
-      if (out.byteLength >= input.byteLength) setStatus(`Hasil tidak lebih kecil (${sizes}), jadi tidak diunduh. PDF ini kebanyakan teks/vektor, pakai tingkat Ringan.`);
+      if (out.byteLength >= input.byteLength) setStatus(tr(`Hasil tidak lebih kecil (${sizes}), jadi tidak diunduh. PDF ini kebanyakan teks/vektor, pakai tingkat Ringan.`, `The result is not smaller (${sizes}), so it was not downloaded. This PDF is mostly text/vector, use the Light level.`));
       else {
-        downloadBuffer(out, 'kompres');
-        setStatus(`Selesai. ${sizes} (−${Math.round((1 - out.byteLength / input.byteLength) * 100)}%).`);
+        downloadBuffer(out, tr('kompres', 'compressed'));
+        setStatus(tr('Selesai.', 'Done.') + ` ${sizes} (−${Math.round((1 - out.byteLength / input.byteLength) * 100)}%).`);
       }
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Kompresi gagal.'); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Kompresi gagal.', 'Compression failed.')); }
     setBusy(false);
   };
 
   const handleRedact = async (boxes: Redactions) => {
     const pages = Object.keys(boxes).map(Number).filter((i) => boxes[i].length).sort((a, b) => a - b);
-    setBusy(true); setStatus('Merender halaman…');
+    setBusy(true); setStatus(tr('Merender halaman…', 'Rendering pages…'));
     try {
       const blobs = await pdfToImages(files[0].bytes, {
         format: 'jpeg', scale: REDACT_SCALE, quality: 0.85, pages,
         // Lebihkan 0,5 pt (1 px) di tiap sisi agar piksel tepi yang ter-antialias ikut tertutup penuh.
         draw: (ctx, page) => { ctx.fillStyle = '#000'; for (const b of boxes[page]) ctx.fillRect(b.x - 0.5, b.y - 0.5, b.w + 1, b.h + 1); },
-      }, (cur, total) => setStatus(`Merender halaman ${cur}/${total}…`));
+      }, (cur, total) => setStatus(tr(`Merender halaman ${cur}/${total}…`, `Rendering page ${cur}/${total}…`)));
       const jpgs = await Promise.all(blobs.map((b) => b.arrayBuffer()));
       setBusy(false);
       // Penyusunan butuh qpdf (WASM) — hanya boleh di worker; CSP halaman memblokir kompilasi WASM.
       await runWorker('redact', [files[0].bytes, ...jpgs], { pages, scale: REDACT_SCALE, filename: files[0].name });
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Sensor gagal.'); setBusy(false); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Sensor gagal.', 'Redaction failed.')); setBusy(false); }
   };
 
   const handleOcr = async (asText: boolean) => {
@@ -341,32 +342,32 @@ export function ToolWorkspace() {
       const { ocrPdf } = await import('../lib/ocr');
       const pages = await ocrPdf(files[0].bytes, setStatus);
       const recognized = pages.filter((p) => !p.skipped).length;
-      const skippedNote = pages.length > recognized ? `, ${pages.length - recognized} halaman sudah berisi teks dan dilewati` : '';
+      const skippedNote = pages.length > recognized ? tr(`, ${pages.length - recognized} halaman sudah berisi teks dan dilewati`, `, ${pages.length - recognized} page(s) already had text and were skipped`) : '';
       if (asText) {
         downloadBlobs([new Blob([pages.map((p) => p.text).join('\n\n')], { type: 'text/plain;charset=utf-8' })], [`${files[0].name.replace(/\.pdf$/i, '')}.txt`], 'text/plain');
-        setStatus(`Selesai. Teks ${pages.length} halaman telah diunduh.`);
+        setStatus(tr(`Selesai. Teks ${pages.length} halaman telah diunduh.`, `Done. Text of ${pages.length} page(s) downloaded.`));
       } else if (!recognized) {
-        setStatus('Semua halaman sudah berisi teks, tidak ada yang perlu di-OCR.');
+        setStatus(tr('Semua halaman sudah berisi teks, tidak ada yang perlu di-OCR.', 'Every page already has text, nothing to OCR.'));
       } else {
-        setStatus('Menyusun PDF…');
+        setStatus(tr('Menyusun PDF…', 'Building PDF…'));
         downloadBuffer(await addTextLayer(files[0].bytes, pages.map((p) => p.words)), 'ocr');
-        setStatus(`Selesai. ${recognized} halaman dikenali${skippedNote}.`);
+        setStatus(tr(`Selesai. ${recognized} halaman dikenali${skippedNote}.`, `Done. ${recognized} page(s) recognized${skippedNote}.`));
       }
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'OCR gagal.'); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('OCR gagal.', 'OCR failed.')); }
     setBusy(false);
   };
 
   const handleEditText = async (edits: TextEdit[]) => {
-    setBusy(true); setPhase(undefined); setStatus('Menyunting teks…');
+    setBusy(true); setPhase(undefined); setStatus(tr('Menyunting teks…', 'Editing text…'));
     try {
       let names: string[] | undefined;
       const [out] = await runJob({ jobId: uid(), operation: 'edit-text', inputs: [files[0].bytes], options: { edits, filename: files[0].name } }, (event) => { names = event.outputNames ?? names; });
-      setStatus('Memeriksa hasil…');
+      setStatus(tr('Memeriksa hasil…', 'Checking the result…'));
       // Diperiksa dari apa yang benar-benar bisa diekstrak pdf.js, bukan dari asumsi engine.
       const problems = await verifyTextEdits(files[0].bytes, out, edits);
-      downloadBlobs([new Blob([out])], [names?.[0] ?? `${files[0].name.replace(/\.pdf$/i, '')}-diedit.pdf`], 'application/pdf');
-      setStatus(problems.length ? `PDF diunduh, tapi perlu dicek. ${problems.join(' ')}` : `Selesai. ${edits.length} perubahan diterapkan; teks lama sudah tidak ada di file.`);
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal menyunting teks.'); }
+      downloadBlobs([new Blob([out])], [names?.[0] ?? `${files[0].name.replace(/\.pdf$/i, '')}-${tr('diedit', 'edited')}.pdf`], 'application/pdf');
+      setStatus(problems.length ? tr(`PDF diunduh, tapi perlu dicek. ${problems.join(' ')}`, `PDF downloaded, but please check it. ${problems.join(' ')}`) : tr(`Selesai. ${edits.length} perubahan diterapkan; teks lama sudah tidak ada di file.`, `Done. ${edits.length} change(s) applied; the old text is gone from the file.`));
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Gagal menyunting teks.', 'Failed to edit text.')); }
     setBusy(false);
   };
 
@@ -377,27 +378,28 @@ export function ToolWorkspace() {
     try {
       if (items.length === 1) {
         downloadBlobs([items[0].blob], [items[0].name], items[0].blob.type);
-        setStatus(`Selesai. ${items[0].name} telah diunduh.`);
+        setStatus(tr(`Selesai. ${items[0].name} telah diunduh.`, `Done. ${items[0].name} downloaded.`));
       } else {
-        setStatus('Mengemas ZIP…');
+        setStatus(tr('Mengemas ZIP…', 'Packing ZIP…'));
         const bytes = await Promise.all(items.map((i) => i.blob.arrayBuffer()));
         const zip = await createZip(bytes.map((b, i) => ({ name: items[i].name, bytes: b })));
-        downloadBlobs([zip], ['privapdf-gambar.zip'], 'application/zip');
-        setStatus(`Selesai. ${items.length} gambar dikemas dalam privapdf-gambar.zip.`);
+        const zipName = tr('privapdf-gambar.zip', 'privapdf-images.zip');
+        downloadBlobs([zip], [zipName], 'application/zip');
+        setStatus(tr(`Selesai. ${items.length} gambar dikemas dalam ${zipName}.`, `Done. ${items.length} images packed into ${zipName}.`));
       }
-    } catch (e) { setStatus(e instanceof Error ? e.message : 'Gagal mengemas ZIP.'); }
+    } catch (e) { setStatus(e instanceof Error ? e.message : tr('Gagal mengemas ZIP.', 'Failed to pack ZIP.')); }
     setBusy(false);
   };
 
   const handleRemoveBg = (blob: Blob, background: string | null) => {
-    downloadBlobs([blob], [`${files[0].name.replace(/\.[^.]+$/, '')}-${background ? 'latar' : 'transparan'}.png`], 'image/png');
-    setStatus(background ? `Selesai. PNG berlatar ${background} telah diunduh.` : 'Selesai. PNG transparan telah diunduh.');
+    downloadBlobs([blob], [`${files[0].name.replace(/\.[^.]+$/, '')}-${background ? tr('latar', 'background') : tr('transparan', 'transparent')}.png`], 'image/png');
+    setStatus(background ? tr(`Selesai. PNG berlatar ${background} telah diunduh.`, `Done. PNG with ${background} background downloaded.`) : tr('Selesai. PNG transparan telah diunduh.', 'Done. Transparent PNG downloaded.'));
   };
 
   const handleUnlock = () => runWorker('unlock', [files[0].bytes], unlockPassword.trim() ? { password: unlockPassword } : undefined);
 
   const handleProtect = () => {
-    if (!protectPassword.trim()) { setStatus('Password buka wajib diisi.'); return; }
+    if (!protectPassword.trim()) { setStatus(tr('Password buka wajib diisi.', 'An open password is required.')); return; }
     const opts: Record<string, unknown> = { password: protectPassword, filename: files[0]?.name };
     if (protectOwner.trim()) opts.ownerPassword = protectOwner;
     runWorker('protect', [files[0].bytes], opts);
@@ -406,14 +408,14 @@ export function ToolWorkspace() {
   const handleDrop = (event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); setDragOver(false); choose(event.dataTransfer.files); };
 
   return <div className="workspace page">
-    <Link className="back" to="/tools">← semua tools</Link>
+    <Link className="back" to="/tools">← {tr('semua tools', 'all tools')}</Link>
     <div className="eyebrow">WORKSPACE / {toolId?.toUpperCase()}</div>
     <h1>{tool.label}</h1>
     <p className="lead">{tool.description}</p>
     <button className={`drop compact ${dragOver ? 'is-drag-over' : ''} ${dropRejected ? 'drop-rejected' : ''}`} onClick={() => ref.current?.click()} onDragEnter={(event) => { event.preventDefault(); setDragOver(true); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDragOver(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragOver(false); }} onDrop={handleDrop}>
       <strong className="drop-icon" aria-hidden="true"><UploadIcon/></strong>
-      <span>{dropRejected ? 'Format file tidak didukung' : files.length ? `${files.length} file dipilih` : IS_TOUCH ? 'Ketuk untuk memilih file' : 'Pilih atau jatuhkan file lokal'}</span>
-      <small>Tidak ada upload ke server</small>
+      <span>{dropRejected ? tr('Format file tidak didukung', 'File format not supported') : files.length ? tr(`${files.length} file dipilih`, `${files.length} file(s) selected`) : IS_TOUCH ? tr('Ketuk untuk memilih file', 'Tap to choose files') : tr('Pilih atau jatuhkan file lokal', 'Choose or drop local files')}</span>
+      <small>{tr('Tidak ada upload ke server', 'Nothing is uploaded to a server')}</small>
     </button>
     <input ref={ref} hidden type="file" accept={tool.accept} multiple={!singleFile} onChange={(e) => choose(e.target.files)} />
 
@@ -422,7 +424,7 @@ export function ToolWorkspace() {
     )}
 
     {files.length > 0 && toolId === 'delete-pages' && pageCount > 0 && (
-      <PageSelectPanel bytes={files[0].bytes} pageCount={pageCount} onProcess={handleDeletePages} busy={busy} title="Hapus halaman" hint="Halaman yang dipilih akan dihapus dari dokumen." />
+      <PageSelectPanel bytes={files[0].bytes} pageCount={pageCount} onProcess={handleDeletePages} busy={busy} title={tr('Hapus halaman', 'Delete pages')} hint={tr('Halaman yang dipilih akan dihapus dari dokumen.', 'The selected pages will be removed from the document.')} />
     )}
 
     {files.length > 0 && toolId === 'reorder-pages' && pageCount > 0 && (
@@ -446,16 +448,16 @@ export function ToolWorkspace() {
     )}
 
     {files.length > 0 && toolId === 'metadata' && (
-      <ToolOptionsForm fields={METADATA_FIELDS} onProcess={handleFormTool} busy={busy} submitLabel="Simpan metadata →" />
+      <ToolOptionsForm fields={METADATA_FIELDS} onProcess={handleFormTool} busy={busy} submitLabel={tr('Simpan metadata →', 'Save metadata →')} />
     )}
 
     {files.length > 0 && toolId === 'pdf-to-image' && (
-      <ToolOptionsForm fields={PDF_TO_IMAGE_FIELDS} onProcess={handlePdfToImage} onSecondary={handlePdfToImageZip} secondaryLabel="Konversi halaman → ZIP" busy={busy} submitLabel={`Konversi ${pageCount || 'semua'} halaman →`} />
+      <ToolOptionsForm fields={PDF_TO_IMAGE_FIELDS} onProcess={handlePdfToImage} onSecondary={handlePdfToImageZip} secondaryLabel={tr('Konversi halaman → ZIP', 'Convert pages → ZIP')} busy={busy} submitLabel={pageCount ? tr(`Konversi ${pageCount} halaman →`, `Convert ${pageCount} pages →`) : tr('Konversi semua halaman →', 'Convert all pages →')} />
     )}
 
     {files.length > 0 && toolId === 'compress' && (
-      <ToolOptionsForm fields={COMPRESS_FIELDS} onProcess={handleCompress} busy={busy} submitLabel="Kompres PDF →">
-        <p className="split-hint">Ringan hampir tidak mengecilkan PDF hasil scan atau yang penuh foto. Untuk itu pilih Sedang atau Kuat, tapi teks di hasilnya tidak bisa dipilih atau dicari lagi.</p>
+      <ToolOptionsForm fields={COMPRESS_FIELDS} onProcess={handleCompress} busy={busy} submitLabel={tr('Kompres PDF →', 'Compress PDF →')}>
+        <p className="split-hint">{tr('Ringan hampir tidak mengecilkan PDF hasil scan atau yang penuh foto. Untuk itu pilih Sedang atau Kuat, tapi teks di hasilnya tidak bisa dipilih atau dicari lagi.', 'Light barely shrinks scanned or photo-heavy PDFs. For those pick Medium or Strong, but the text in the result can no longer be selected or searched.')}</p>
       </ToolOptionsForm>
     )}
 
@@ -468,19 +470,19 @@ export function ToolWorkspace() {
     )}
 
     {files.length > 0 && toolId === 'n-up' && (
-      <ToolOptionsForm fields={NUP_FIELDS} onProcess={(values) => runWorker('n-up', [files[0].bytes], { layout: values.layout, filename: files[0].name })} busy={busy} submitLabel="Susun halaman →">
-        <p className="split-hint">Buklet: cetak bolak-balik dengan balik di sisi pendek (short edge), tumpuk, lalu lipat di tengah. Jumlah halaman dilengkapi halaman kosong sampai kelipatan 4.</p>
+      <ToolOptionsForm fields={NUP_FIELDS} onProcess={(values) => runWorker('n-up', [files[0].bytes], { layout: values.layout, filename: files[0].name })} busy={busy} submitLabel={tr('Susun halaman →', 'Arrange pages →')}>
+        <p className="split-hint">{tr('Buklet: cetak bolak-balik dengan balik di sisi pendek (short edge), tumpuk, lalu lipat di tengah. Jumlah halaman dilengkapi halaman kosong sampai kelipatan 4.', 'Booklet: print double-sided flipping on the short edge, stack, then fold in the middle. Blank pages are added up to a multiple of 4.')}</p>
       </ToolOptionsForm>
     )}
 
     {files.length > 0 && toolId === 'ocr' && (
-      <ToolOptionsForm fields={[]} onProcess={() => handleOcr(false)} onSecondary={() => handleOcr(true)} secondaryLabel="Unduh teksnya saja (.txt)" busy={busy} submitLabel="Buat PDF bisa dicari →">
-        <p className="split-hint">Mengenali teks berbahasa Indonesia dan Inggris. Pemakaian pertama mengunduh mesin OCR ±8 MB, dan tiap halaman butuh beberapa detik. Halaman yang sudah berisi teks dilewati.</p>
+      <ToolOptionsForm fields={[]} onProcess={() => handleOcr(false)} onSecondary={() => handleOcr(true)} secondaryLabel={tr('Unduh teksnya saja (.txt)', 'Download the text only (.txt)')} busy={busy} submitLabel={tr('Buat PDF bisa dicari →', 'Make PDF searchable →')}>
+        <p className="split-hint">{tr('Mengenali teks berbahasa Indonesia dan Inggris. Pemakaian pertama mengunduh mesin OCR ±8 MB, dan tiap halaman butuh beberapa detik. Halaman yang sudah berisi teks dilewati.', 'Recognizes Indonesian and English text. First use downloads a ±8 MB OCR engine, and each page takes a few seconds. Pages that already have text are skipped.')}</p>
       </ToolOptionsForm>
     )}
 
     {files.length > 0 && toolId === 'extract-text' && (
-      <button className="primary" onClick={handleExtractText} disabled={busy}>{busy ? 'Memproses…' : 'Ekstrak teks →'}</button>
+      <button className="primary" onClick={handleExtractText} disabled={busy}>{busy ? tr('Memproses…', 'Processing…') : tr('Ekstrak teks →', 'Extract text →')}</button>
     )}
 
     {files.length > 0 && toolId === 'sign' && (
@@ -504,7 +506,7 @@ export function ToolWorkspace() {
 
     {files.length > 0 && toolId === 'flatten' && (
       <button className="primary" onClick={handleFlatten} disabled={busy}>
-        {busy ? 'Memproses…' : 'Ratakan formulir →'}
+        {busy ? tr('Memproses…', 'Processing…') : tr('Ratakan formulir →', 'Flatten form →')}
       </button>
     )}
 
@@ -515,12 +517,12 @@ export function ToolWorkspace() {
             <div key={file.id} className="merge-file-row">
               <span className="merge-file-dot" style={{ background: FILE_COLORS[i % FILE_COLORS.length] }} />
               <span className="merge-file-name">{file.name}</span>
-              <button type="button" className="merge-file-remove" aria-label={`Hapus ${file.name}`} onClick={() => removeFile(i)} disabled={files.length <= 1}>✕</button>
+              <button type="button" className="merge-file-remove" aria-label={tr(`Hapus ${file.name}`, `Remove ${file.name}`)} onClick={() => removeFile(i)} disabled={files.length <= 1}>✕</button>
             </div>
           ))}
         </div>
         <button className="ghost-btn add-more-btn" onClick={() => addMoreRef.current?.click()}>
-          ＋ Tambah file PDF
+          ＋ {tr('Tambah file PDF', 'Add PDF files')}
         </button>
         <input ref={addMoreRef} hidden type="file" accept={tool.accept} multiple onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <MergePanel files={mergeFiles} onProcess={handleMergePages} busy={busy} />
@@ -531,12 +533,12 @@ export function ToolWorkspace() {
       <div className="split-panel">
         <div className="tool-form">
           <div className="tool-form-field">
-            <label className="tool-form-label" htmlFor="unlock-password">Password PDF (opsional)</label>
-            <input id="unlock-password" type="password" className="tool-form-input" value={unlockPassword} placeholder="Kosongkan jika PDF bisa dibuka tanpa password" onChange={(e) => setUnlockPassword(e.target.value)} />
+            <label className="tool-form-label" htmlFor="unlock-password">{tr('Password PDF (opsional)', 'PDF password (optional)')}</label>
+            <input id="unlock-password" type="password" className="tool-form-input" value={unlockPassword} placeholder={tr('Kosongkan jika PDF bisa dibuka tanpa password', 'Leave empty if the PDF opens without a password')} onChange={(e) => setUnlockPassword(e.target.value)} />
           </div>
         </div>
         <button className="primary" onClick={handleUnlock} disabled={busy}>
-          {busy ? 'Memproses…' : 'Hapus proteksi →'}
+          {busy ? tr('Memproses…', 'Processing…') : tr('Hapus proteksi →', 'Unlock →')}
         </button>
       </div>
     )}
@@ -545,16 +547,16 @@ export function ToolWorkspace() {
       <div className="split-panel">
         <div className="tool-form">
           <div className="tool-form-field">
-            <label className="tool-form-label" htmlFor="protect-password">Password buka (wajib)</label>
-            <input id="protect-password" type="password" className="tool-form-input" value={protectPassword} placeholder="Password yang diminta saat membuka PDF" onChange={(e) => setProtectPassword(e.target.value)} />
+            <label className="tool-form-label" htmlFor="protect-password">{tr('Password buka (wajib)', 'Open password (required)')}</label>
+            <input id="protect-password" type="password" className="tool-form-input" value={protectPassword} placeholder={tr('Password yang diminta saat membuka PDF', 'Password asked when opening the PDF')} onChange={(e) => setProtectPassword(e.target.value)} />
           </div>
           <div className="tool-form-field">
-            <label className="tool-form-label" htmlFor="protect-owner">Password pemilik (opsional)</label>
-            <input id="protect-owner" type="password" className="tool-form-input" value={protectOwner} placeholder="Akses penuh tanpa batasan; default sama dengan password buka" onChange={(e) => setProtectOwner(e.target.value)} />
+            <label className="tool-form-label" htmlFor="protect-owner">{tr('Password pemilik (opsional)', 'Owner password (optional)')}</label>
+            <input id="protect-owner" type="password" className="tool-form-input" value={protectOwner} placeholder={tr('Akses penuh tanpa batasan; default sama dengan password buka', 'Full unrestricted access; defaults to the open password')} onChange={(e) => setProtectOwner(e.target.value)} />
           </div>
         </div>
         <button className="primary" onClick={handleProtect} disabled={busy}>
-          {busy ? 'Memproses…' : 'Beri password →'}
+          {busy ? tr('Memproses…', 'Processing…') : tr('Beri password →', 'Protect →')}
         </button>
       </div>
     )}
@@ -563,7 +565,7 @@ export function ToolWorkspace() {
       <button className="primary" onClick={() => {
         const opts = toolId === 'image-to-pdf' ? { type: /\.jpe?g$/i.test(files[0]?.name ?? '') ? 'jpg' : 'png' } : toolId === 'office-to-pdf' || toolId === 'sanitize' ? { filename: files[0]?.name } : undefined;
         runWorker(toolId!, files.map((f) => f.bytes), opts);
-      }} disabled={busy}>{busy ? 'Memproses…' : 'Jalankan proses →'}</button>
+      }} disabled={busy}>{busy ? tr('Memproses…', 'Processing…') : tr('Jalankan proses →', 'Run →')}</button>
     )}
 
     <div className="status" role="status" aria-live="polite">

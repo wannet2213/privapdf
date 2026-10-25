@@ -1,6 +1,8 @@
 // Parser dan validator untuk split modes: each, ranges, groups.
 // Semua index internal menggunakan 0-based. Input pengguna 1-based.
 
+import { tr } from './i18n';
+
 export type SplitMode = 'each' | 'ranges' | 'groups';
 
 /** Hasil parse satu rentang: [start, end] inklusif, 0-based. */
@@ -64,10 +66,10 @@ export function parseGroups(input: string): number[][] {
  * Mengembalikan error jika ada rentang yang keluar batas.
  */
 export function validateRanges(ranges: Range[], pageCount: number): string | undefined {
-  if (!ranges.length) return 'Tidak ada rentang yang dimasukkan.';
+  if (!ranges.length) return tr('Tidak ada rentang yang dimasukkan.', 'No ranges entered.');
   for (const [start, end] of ranges) {
     if (start < 0 || end >= pageCount) {
-      return `Rentang ${start + 1}-${end + 1} berada di luar jumlah halaman (${pageCount}).`;
+      return tr(`Rentang ${start + 1}-${end + 1} berada di luar jumlah halaman (${pageCount}).`, `Range ${start + 1}-${end + 1} is outside the page count (${pageCount}).`);
     }
   }
   return undefined;
@@ -78,11 +80,11 @@ export function validateRanges(ranges: Range[], pageCount: number): string | und
  */
 export function validateGroups(groups: number[][], pageCount: number): string | undefined {
   const nonEmpty = groups.filter((g) => g.length);
-  if (!nonEmpty.length) return 'Tidak ada kelompok halaman yang dimasukkan.';
+  if (!nonEmpty.length) return tr('Tidak ada kelompok halaman yang dimasukkan.', 'No page groups entered.');
   for (const group of nonEmpty) {
     for (const idx of group) {
       if (idx < 0 || idx >= pageCount) {
-        return `Halaman ${idx + 1} berada di luar jumlah halaman (${pageCount}).`;
+        return tr(`Halaman ${idx + 1} berada di luar jumlah halaman (${pageCount}).`, `Page ${idx + 1} is outside the page count (${pageCount}).`);
       }
     }
   }

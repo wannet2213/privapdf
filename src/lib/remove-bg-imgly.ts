@@ -4,11 +4,13 @@
  * tetap ketat. Aset model self-host di /imgly/ lewat `npm run setup:imgly`.
  */
 
+import { tr } from './i18n';
+
 const TIMEOUT_MS = 10 * 60_000;
 
 export type ImglyModel = 'isnet' | 'isnet_fp16' | 'isnet_quint8';
 
-const MODEL_LABEL: Record<ImglyModel, string> = { isnet: 'Maksimal', isnet_fp16: 'Seimbang', isnet_quint8: 'Ringan' };
+const MODEL_LABEL: Record<ImglyModel, string> = { isnet: tr('Maksimal', 'Maximum'), isnet_fp16: tr('Seimbang', 'Balanced'), isnet_quint8: tr('Ringan', 'Light') };
 
 // imgly tidak memeriksa status HTTP potongan model: aset yang belum terpasang muncul sebagai ukuran
 // tak cocok (server menjawab halaman HTML/404, mis. "with size 4194304 but got 948") atau "not found".
@@ -17,7 +19,7 @@ const MISSING_ASSET = /Failed to fetch .* with size|Resource( metadata)? .*not f
 /** Pesan galat imgly → kalimat yang bisa ditindaklanjuti pengguna. */
 export function imglyErrorMessage(error: string, model: ImglyModel): string {
   return MISSING_ASSET.test(error)
-    ? `Model "${MODEL_LABEL[model]}" belum terpasang lengkap di server ini (npm run setup:imgly). Pilih kualitas model lain atau pasang asetnya.`
+    ? tr(`Model "${MODEL_LABEL[model]}" belum terpasang lengkap di server ini (npm run setup:imgly). Pilih kualitas model lain atau pasang asetnya.`, `The "${MODEL_LABEL[model]}" model is not fully installed on this server (npm run setup:imgly). Pick another model quality or install its assets.`)
     : error;
 }
 
@@ -33,7 +35,7 @@ export async function removeBackgroundImgly(
     const worker = new Worker(new URL('../workers/imgly.worker.ts', import.meta.url), { type: 'module' });
     const timer = setTimeout(() => {
       worker.terminate();
-      reject(new Error('Pemrosesan melebihi 10 menit — dibatalkan. Coba varian lebih ringan.'));
+      reject(new Error(tr('Pemrosesan melebihi 10 menit — dibatalkan. Coba varian lebih ringan.', 'Processing took over 10 minutes — cancelled. Try a lighter variant.')));
     }, TIMEOUT_MS);
     const fail = (message: string) => {
       clearTimeout(timer);
@@ -42,16 +44,16 @@ export async function removeBackgroundImgly(
     };
     worker.onmessage = (e: MessageEvent) => {
       const m = e.data as { type: string; message?: string; error?: string; blob?: Blob };
-      if (m.type === 'status') onStatus?.(m.message || 'Memproses…');
+      if (m.type === 'status') onStatus?.(m.message || tr('Memproses…', 'Processing…'));
       else if (m.type === 'result' && m.blob) {
         clearTimeout(timer);
         worker.terminate();
         resolve(m.blob);
       } else if (m.type === 'error') {
-        fail(imglyErrorMessage(m.error || 'Konversi gagal.', model));
+        fail(imglyErrorMessage(m.error || tr('Konversi gagal.', 'Conversion failed.'), model));
       }
     };
-    worker.onerror = () => fail('Komponen AI gagal dimuat. Fitur ini mungkin belum aktif di situs ini.');
+    worker.onerror = () => fail(tr('Komponen AI gagal dimuat. Fitur ini mungkin belum aktif di situs ini.', 'The AI component failed to load. This feature may not be enabled on this site.'));
     worker.postMessage({ type: 'convert', data: copy, model }, [copy]);
   });
 }

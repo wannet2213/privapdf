@@ -7,6 +7,7 @@ import { uid } from '../lib/uid';
 import { convertImage, FORMAT_EXT, withFormatExt, type ImageFormat } from '../lib/image-toolkit';
 import type { SessionFile } from '../lib/file-session';
 import type { ImageOutput } from './ImageToolkitPanel';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -61,7 +62,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
   // Watermark options
   const [wmContent, setWmContent] = useState<'text' | 'image'>('text');
   const [wmType, setWmType] = useState<WatermarkType>('center');
-  const [wmText, setWmText] = useState('RAHASIA');
+  const [wmText, setWmText] = useState(tr('RAHASIA', 'CONFIDENTIAL'));
   const [wmFontSize, setWmFontSize] = useState(50);
   const [wmOpacity, setWmOpacity] = useState(25);
   const [wmRotation, setWmRotation] = useState(45);
@@ -294,15 +295,15 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
   // Handle unggah font TTF/OTF: validasi magic bytes → daftarkan FontFace → simpan di sesi
   const handleFontUpload = async (file: File) => {
     setFontError(undefined);
-    if (file.size > 10 * 1024 * 1024) { setFontError('Ukuran font maksimal 10 MB.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setFontError(tr('Ukuran font maksimal 10 MB.', 'Font size limit is 10 MB.')); return; }
     const buf = await file.arrayBuffer();
-    if (buf.byteLength < 12) { setFontError('File font tidak valid.'); return; }
+    if (buf.byteLength < 12) { setFontError(tr('File font tidak valid.', 'Invalid font file.')); return; }
     const magic = new DataView(buf).getUint32(0);
     const isOtf = magic === 0x4f54544f;        // 'OTTO'
     const isTtf = magic === 0x00010000          // sfnt 1.0 (TTF)
       || magic === 0x74727565                   // 'true'
       || magic === 0x74746366;                  // 'ttcf' (collection)
-    if (!isOtf && !isTtf) { setFontError('Format tidak didukung. Gunakan file TTF atau OTF.'); return; }
+    if (!isOtf && !isTtf) { setFontError(tr('Format tidak didukung. Gunakan file TTF atau OTF.', 'Unsupported format. Use a TTF or OTF file.')); return; }
     const id = `custom-${uid()}`;
     const family = `PrivaDF-${id}`;
     try {
@@ -310,10 +311,10 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
       await face.load();
       document.fonts.add(face);
     } catch {
-      setFontError('Font gagal dimuat browser. File mungkin rusak.');
+      setFontError(tr('Font gagal dimuat browser. File mungkin rusak.', 'The browser could not load the font. The file may be damaged.'));
       return;
     }
-    setCustomFonts((prev) => [...prev, { id, label: file.name.replace(/\.(ttf?|otf)$/i, '') || 'Font kustom', bytes: buf, family }]);
+    setCustomFonts((prev) => [...prev, { id, label: file.name.replace(/\.(ttf?|otf)$/i, '') || tr('Font kustom', 'Custom font'), bytes: buf, family }]);
     setWmFont(id);
   };
 
@@ -326,11 +327,11 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
       for (const f of list) {
         const format = (f.type in FORMAT_EXT ? f.type : 'image/png') as ImageFormat;
         const r = await convertImage(f.bytes, { format, quality: 0.92, maxWidth: 0 }, (ctx, w, h) => drawOverlay(ctx, w, h, Math.max(w, h) / PHOTO_LONG_SIDE));
-        out.push({ blob: r.blob, name: withFormatExt(f.name, r.actualFormat).replace(/(\.[^.]+)$/, '-tanda-air$1') });
+        out.push({ blob: r.blob, name: withFormatExt(f.name, r.actualFormat).replace(/(\.[^.]+)$/, tr('-tanda-air$1', '-watermarked$1')) });
       }
       onImages?.(out);
     } catch (e) {
-      setRenderError(e instanceof Error ? e.message : 'Gagal memproses gambar.');
+      setRenderError(e instanceof Error ? e.message : tr('Gagal memproses gambar.', 'Failed to process the image.'));
     }
     setRendering(false);
   };
@@ -370,13 +371,13 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
           <div className="annotate-canvas-stack">
             <canvas ref={baseCanvasRef} className="annotate-canvas-base" />
             <canvas ref={overlayCanvasRef} className="annotate-canvas-overlay" />
-            {!loading && !isPhoto && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(0)} aria-label="Lihat halaman full">⤢</button>}
-            {loading && <div className="annotate-loading">{isPhoto ? 'Memuat gambar…' : 'Memuat halaman…'}</div>}
+            {!loading && !isPhoto && <button type="button" className="page-thumb-zoom annotate-zoom-btn" onClick={() => setViewing(0)} aria-label={tr('Lihat halaman full', 'View full page')}>⤢</button>}
+            {loading && <div className="annotate-loading">{isPhoto ? tr('Memuat gambar…', 'Loading image…') : tr('Memuat halaman…', 'Loading page…')}</div>}
           </div>
           <p className="annotate-caption">
             {images
-              ? `Pratinjau langsung, ${images[0].name}${images.length > 1 ? ` (diterapkan ke ${images.length} gambar)` : ''}`
-              : `Pratinjau langsung, halaman 1 dari ${totalPages}`}
+              ? `${tr('Pratinjau langsung', 'Live preview')}, ${images[0].name}${images.length > 1 ? tr(` (diterapkan ke ${images.length} gambar)`, ` (applied to ${images.length} images)`) : ''}`
+              : tr(`Pratinjau langsung, halaman 1 dari ${totalPages}`, `Live preview, page 1 of ${totalPages}`)}
           </p>
         </div>
 
@@ -384,14 +385,14 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
           {mode === 'page-numbers' ? (
             <>
               <div className="tool-form-field">
-                <label className="tool-form-label" htmlFor="pn-pos">Posisi</label>
+                <label className="tool-form-label" htmlFor="pn-pos">{tr('Posisi', 'Position')}</label>
                 <select id="pn-pos" className="tool-form-input" value={position} onChange={(e) => setPosition(e.target.value as Position)}>
-                  <option value="bottom-center">Bawah Tengah</option>
-                  <option value="bottom-left">Bawah Kiri</option>
-                  <option value="bottom-right">Bawah Kanan</option>
-                  <option value="top-center">Atas Tengah</option>
-                  <option value="top-left">Atas Kiri</option>
-                  <option value="top-right">Atas Kanan</option>
+                  <option value="bottom-center">{tr('Bawah Tengah', 'Bottom Center')}</option>
+                  <option value="bottom-left">{tr('Bawah Kiri', 'Bottom Left')}</option>
+                  <option value="bottom-right">{tr('Bawah Kanan', 'Bottom Right')}</option>
+                  <option value="top-center">{tr('Atas Tengah', 'Top Center')}</option>
+                  <option value="top-left">{tr('Atas Kiri', 'Top Left')}</option>
+                  <option value="top-right">{tr('Atas Kanan', 'Top Right')}</option>
                 </select>
               </div>
               <div className="tool-form-field">
@@ -403,18 +404,18 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
                 </select>
               </div>
               <div className="tool-form-field">
-                <label className="tool-form-label" htmlFor="pn-start">Mulai dari</label>
+                <label className="tool-form-label" htmlFor="pn-start">{tr('Mulai dari', 'Start from')}</label>
                 <input id="pn-start" type="number" className="tool-form-input" value={startFrom} min={1} onChange={(e) => setStartFrom(Number(e.target.value))} />
               </div>
               <div className="tool-form-field">
                 <div className="tool-form-range-row">
-                  <label className="tool-form-label" htmlFor="pn-size">Ukuran font</label>
+                  <label className="tool-form-label" htmlFor="pn-size">{tr('Ukuran font', 'Font size')}</label>
                   <span className="tool-form-range-value">{pnFontSize}</span>
                 </div>
                 <input id="pn-size" type="range" min={6} max={36} value={pnFontSize} onChange={(e) => setPnFontSize(Number(e.target.value))} />
               </div>
               <div className="tool-form-field">
-                <label className="tool-form-label" htmlFor="pn-color">Warna</label>
+                <label className="tool-form-label" htmlFor="pn-color">{tr('Warna', 'Color')}</label>
                 <input id="pn-color" type="color" className="annotate-color-input" value={pnColor} onChange={(e) => setPnColor(e.target.value)} />
               </div>
               <div className="tool-form-field">
@@ -427,31 +428,31 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
           ) : (
             <>
               <div className="tool-form-field">
-                <label className="tool-form-label">Isi tanda air</label>
+                <label className="tool-form-label">{tr('Isi tanda air', 'Watermark content')}</label>
                 <div className="wm-type-tabs">
-                  <button type="button" className={`wm-type-tab ${wmContent === 'text' ? 'is-active' : ''}`} onClick={() => setWmContent('text')}>Teks</button>
-                  <button type="button" className={`wm-type-tab ${wmContent === 'image' ? 'is-active' : ''}`} onClick={() => setWmContent('image')}>Gambar</button>
+                  <button type="button" className={`wm-type-tab ${wmContent === 'text' ? 'is-active' : ''}`} onClick={() => setWmContent('text')}>{tr('Teks', 'Text')}</button>
+                  <button type="button" className={`wm-type-tab ${wmContent === 'image' ? 'is-active' : ''}`} onClick={() => setWmContent('image')}>{tr('Gambar', 'Image')}</button>
                 </div>
               </div>
               <div className="tool-form-field">
-                <label className="tool-form-label">Tata letak</label>
+                <label className="tool-form-label">{tr('Tata letak', 'Layout')}</label>
                 <div className="wm-type-tabs">
-                  <button type="button" className={`wm-type-tab ${wmType === 'center' ? 'is-active' : ''}`} onClick={() => setWmType('center')}>Tengah</button>
-                  <button type="button" className={`wm-type-tab ${wmType === 'tiled' ? 'is-active' : ''}`} onClick={() => setWmType('tiled')}>Berubin</button>
-                  <button type="button" className={`wm-type-tab ${wmType === 'positioned' ? 'is-active' : ''}`} onClick={() => setWmType('positioned')}>Posisi</button>
+                  <button type="button" className={`wm-type-tab ${wmType === 'center' ? 'is-active' : ''}`} onClick={() => setWmType('center')}>{tr('Tengah', 'Center')}</button>
+                  <button type="button" className={`wm-type-tab ${wmType === 'tiled' ? 'is-active' : ''}`} onClick={() => setWmType('tiled')}>{tr('Berubin', 'Tiled')}</button>
+                  <button type="button" className={`wm-type-tab ${wmType === 'positioned' ? 'is-active' : ''}`} onClick={() => setWmType('positioned')}>{tr('Posisi', 'Positioned')}</button>
                 </div>
               </div>
 
               {wmContent === 'image' ? (
                 <>
                   <div className="tool-form-field">
-                    <label className="tool-form-label" htmlFor="wm-img">Unggah gambar (PNG/JPG)</label>
+                    <label className="tool-form-label" htmlFor="wm-img">{tr('Unggah gambar (PNG/JPG)', 'Upload image (PNG/JPG)')}</label>
                     <input id="wm-img" type="file" accept="image/png,image/jpeg" className="tool-form-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImageUpload(f); }} />
                   </div>
                   {wmImage && (
                     <div className="tool-form-field">
                       <div className="tool-form-range-row">
-                        <label className="tool-form-label" htmlFor="wm-img-scale">Ukuran gambar</label>
+                        <label className="tool-form-label" htmlFor="wm-img-scale">{tr('Ukuran gambar', 'Image size')}</label>
                         <span className="tool-form-range-value">{wmImageScale}%</span>
                       </div>
                       <input id="wm-img-scale" type="range" min={10} max={80} value={wmImageScale} onChange={(e) => setWmImageScale(Number(e.target.value))} />
@@ -460,28 +461,28 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
                 </>
               ) : (
                 <div className="tool-form-field">
-                  <label className="tool-form-label" htmlFor="wm-text">Teks tanda air</label>
-                  <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder="Contoh: RAHASIA (tekan Enter untuk baris baru)" onChange={(e) => setWmText(e.target.value)} />
-                  <small className="wm-text-meta">{wmText.split('\n').length} baris. Tekan Enter di kolom teks untuk menambah baris</small>
+                  <label className="tool-form-label" htmlFor="wm-text">{tr('Teks tanda air', 'Watermark text')}</label>
+                  <textarea id="wm-text" className="tool-form-input wm-textarea" rows={2} value={wmText} placeholder={tr('Contoh: RAHASIA (tekan Enter untuk baris baru)', 'Example: CONFIDENTIAL (press Enter for a new line)')} onChange={(e) => setWmText(e.target.value)} />
+                  <small className="wm-text-meta">{tr(`${wmText.split('\n').length} baris. Tekan Enter di kolom teks untuk menambah baris`, `${wmText.split('\n').length} line(s). Press Enter in the text box to add a line`)}</small>
                 </div>
               )}
 
               {wmType === 'positioned' && (
                 <div className="tool-form-field">
-                  <label className="tool-form-label" htmlFor="wm-pos">Posisi</label>
+                  <label className="tool-form-label" htmlFor="wm-pos">{tr('Posisi', 'Position')}</label>
                   <select id="wm-pos" className="tool-form-input" value={wmPosition} onChange={(e) => setWmPosition(e.target.value as WatermarkPosition)}>
-                    <option value="center">Tengah</option>
-                    <option value="top-left">Kiri Atas</option>
-                    <option value="top-right">Kanan Atas</option>
-                    <option value="bottom-left">Kiri Bawah</option>
-                    <option value="bottom-right">Kanan Bawah</option>
+                    <option value="center">{tr('Tengah', 'Center')}</option>
+                    <option value="top-left">{tr('Kiri Atas', 'Top Left')}</option>
+                    <option value="top-right">{tr('Kanan Atas', 'Top Right')}</option>
+                    <option value="bottom-left">{tr('Kiri Bawah', 'Bottom Left')}</option>
+                    <option value="bottom-right">{tr('Kanan Bawah', 'Bottom Right')}</option>
                   </select>
                 </div>
               )}
               {wmContent === 'text' && (
                 <div className="tool-form-field">
                   <div className="tool-form-range-row">
-                    <label className="tool-form-label" htmlFor="wm-size">Ukuran font</label>
+                    <label className="tool-form-label" htmlFor="wm-size">{tr('Ukuran font', 'Font size')}</label>
                     <span className="tool-form-range-value">{wmFontSize}</span>
                   </div>
                   <input id="wm-size" type="range" min={12} max={120} value={wmFontSize} onChange={(e) => setWmFontSize(Number(e.target.value))} />
@@ -489,7 +490,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
               )}
               <div className="tool-form-field">
                 <div className="tool-form-range-row">
-                  <label className="tool-form-label" htmlFor="wm-op">Opasitas</label>
+                  <label className="tool-form-label" htmlFor="wm-op">{tr('Opasitas', 'Opacity')}</label>
                   <span className="tool-form-range-value">{wmOpacity}%</span>
                 </div>
                 <input id="wm-op" type="range" min={5} max={80} value={wmOpacity} onChange={(e) => setWmOpacity(Number(e.target.value))} />
@@ -497,7 +498,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
               {wmType !== 'positioned' && (
                 <div className="tool-form-field">
                   <div className="tool-form-range-row">
-                    <label className="tool-form-label" htmlFor="wm-rot">Rotasi</label>
+                    <label className="tool-form-label" htmlFor="wm-rot">{tr('Rotasi', 'Rotation')}</label>
                     <span className="tool-form-range-value">{wmRotation}°</span>
                   </div>
                   <input id="wm-rot" type="range" min={0} max={90} value={wmRotation} onChange={(e) => setWmRotation(Number(e.target.value))} />
@@ -506,25 +507,25 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
               {wmType === 'tiled' && (
                 <div className="tool-form-field">
                   <div className="tool-form-range-row">
-                    <label className="tool-form-label" htmlFor="wm-tilegap">Jarak antar ubin</label>
+                    <label className="tool-form-label" htmlFor="wm-tilegap">{tr('Jarak antar ubin', 'Tile spacing')}</label>
                     <span className="tool-form-range-value">{wmContent === 'image' ? `${Math.round(wmTileGap * IMAGE_GAP_UNIT)} pt` : `${wmTileGap.toFixed(1)}×`}</span>
                   </div>
                   <input id="wm-tilegap" type="range" min={0.5} max={6} step={0.1} value={wmTileGap} onChange={(e) => setWmTileGap(Number(e.target.value))} />
-                  <small className="wm-field-hint">{wmContent === 'image' ? 'Kecil = rapat, besar = renggang' : 'Pengali ukuran font: kecil = rapat, besar = renggang'}</small>
+                  <small className="wm-field-hint">{wmContent === 'image' ? tr('Kecil = rapat, besar = renggang', 'Small = tight, large = loose') : tr('Pengali ukuran font: kecil = rapat, besar = renggang', 'Font size multiplier: small = tight, large = loose')}</small>
                 </div>
               )}
               {wmContent === 'text' && (
                 <>
                   <div className="tool-form-field">
                     <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-spacing">Spasi huruf</label>
+                      <label className="tool-form-label" htmlFor="wm-spacing">{tr('Spasi huruf', 'Letter spacing')}</label>
                       <span className="tool-form-range-value">{wmLetterSpacing > 0 ? `+${wmLetterSpacing}` : wmLetterSpacing}</span>
                     </div>
                     <input id="wm-spacing" type="range" min={-5} max={20} step={0.5} value={wmLetterSpacing} onChange={(e) => setWmLetterSpacing(Number(e.target.value))} />
                   </div>
                   <div className={`tool-form-field ${wmText.split('\n').length < 2 ? 'is-disabled' : ''}`}>
                     <div className="tool-form-range-row">
-                      <label className="tool-form-label" htmlFor="wm-lineh">Tinggi baris</label>
+                      <label className="tool-form-label" htmlFor="wm-lineh">{tr('Tinggi baris', 'Line height')}</label>
                       <span className="tool-form-range-value">{wmLineHeight.toFixed(2)}×</span>
                     </div>
                     <input
@@ -538,21 +539,21 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
                       onChange={(e) => setWmLineHeight(Number(e.target.value))}
                     />
                     {wmText.split('\n').length < 2 && (
-                      <small className="wm-field-hint">Berlaku untuk teks multi-baris, tambahkan baris kedua dulu</small>
+                      <small className="wm-field-hint">{tr('Berlaku untuk teks multi-baris, tambahkan baris kedua dulu', 'Applies to multi-line text, add a second line first')}</small>
                     )}
                   </div>
                 </>
               )}
               <div className="tool-form-field">
                 <div className="tool-form-range-row">
-                  <label className="tool-form-label" htmlFor="wm-offx">Geser horizontal</label>
+                  <label className="tool-form-label" htmlFor="wm-offx">{tr('Geser horizontal', 'Horizontal offset')}</label>
                   <span className="tool-form-range-value">{wmOffsetX > 0 ? `+${wmOffsetX}` : wmOffsetX}</span>
                 </div>
                 <input id="wm-offx" type="range" min={-300} max={300} step={5} value={wmOffsetX} onChange={(e) => setWmOffsetX(Number(e.target.value))} />
               </div>
               <div className="tool-form-field">
                 <div className="tool-form-range-row">
-                  <label className="tool-form-label" htmlFor="wm-offy">Geser vertikal</label>
+                  <label className="tool-form-label" htmlFor="wm-offy">{tr('Geser vertikal', 'Vertical offset')}</label>
                   <span className="tool-form-range-value">{wmOffsetY > 0 ? `+${wmOffsetY}` : wmOffsetY}</span>
                 </div>
                 <input id="wm-offy" type="range" min={-300} max={300} step={5} value={wmOffsetY} onChange={(e) => setWmOffsetY(Number(e.target.value))} />
@@ -560,23 +561,23 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
               {wmContent === 'text' && (
                 <>
                   <div className="tool-form-field">
-                    <label className="tool-form-label" htmlFor="wm-color">Warna</label>
+                    <label className="tool-form-label" htmlFor="wm-color">{tr('Warna', 'Color')}</label>
                     <input id="wm-color" type="color" className="annotate-color-input" value={wmColor} onChange={(e) => setWmColor(e.target.value)} />
                   </div>
                   <div className="tool-form-field">
                     <label className="tool-form-label" htmlFor="wm-font">Font</label>
                     <select id="wm-font" className="tool-form-input" value={wmFont} onChange={(e) => setWmFont(e.target.value)}>
-                      <optgroup label="Font bawaan">
+                      <optgroup label={tr('Font bawaan', 'Built-in fonts')}>
                         {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                       </optgroup>
                       {customFonts.length > 0 && (
-                        <optgroup label="Font diunggah">
+                        <optgroup label={tr('Font diunggah', 'Uploaded fonts')}>
                           {customFonts.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                         </optgroup>
                       )}
                     </select>
                     <button type="button" className="ghost-btn wm-upload-btn" onClick={() => fontInputRef.current?.click()}>
-                      ⬆ Unggah font (TTF/OTF)
+                      ⬆ {tr('Unggah font (TTF/OTF)', 'Upload font (TTF/OTF)')}
                     </button>
                     <input ref={fontInputRef} hidden type="file" accept=".ttf,.otf" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFontUpload(f); e.target.value = ''; }} />
                     {fontError && <p className="wm-font-error" role="alert">{fontError}</p>}
@@ -588,7 +589,7 @@ export function AnnotatePanel({ bytes, mode, onProcess, busy, images, onImages }
         </div>
       </div>
       <button className="primary" onClick={submit} disabled={busy || rendering || (mode === 'watermark' && wmContent === 'image' && !wmImage)}>
-        {busy || rendering ? 'Memproses…' : mode === 'page-numbers' ? 'Terapkan ke semua halaman' : images && images.length > 1 ? `Tambah tanda air ke ${images.length} gambar` : 'Tambah tanda air'}
+        {busy || rendering ? tr('Memproses…', 'Processing…') : mode === 'page-numbers' ? tr('Terapkan ke semua halaman', 'Apply to all pages') : images && images.length > 1 ? tr(`Tambah tanda air ke ${images.length} gambar`, `Add watermark to ${images.length} images`) : tr('Tambah tanda air', 'Add watermark')}
       </button>
       {renderError && <p className="wm-font-error" role="alert">{renderError}</p>}
       {viewing !== null && (

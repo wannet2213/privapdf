@@ -2,6 +2,7 @@ import { createWorker, OEM, type Line } from 'tesseract.js';
 import type { PageViewport } from 'pdfjs-dist';
 import { loadPdfDoc } from './pdf-client';
 import type { TextLayerWord } from '../engines/pdf-native';
+import { tr } from './i18n';
 
 // Render 216 dpi: cukup untuk teks ukuran normal tanpa canvas raksasa.
 const OCR_SCALE = 3;
@@ -17,7 +18,7 @@ export interface OcrPage {
 }
 
 export async function ocrPdf(bytes: ArrayBuffer, onStatus: (status: string) => void): Promise<OcrPage[]> {
-  onStatus('Memuat mesin OCR…');
+  onStatus(tr('Memuat mesin OCR…', 'Loading the OCR engine…'));
   let current = '';
   // Aset disajikan sendiri dari public/tesseract (npm run setup:ocr) — bukan CDN bawaan tesseract.js.
   const worker = await createWorker(['ind', 'eng'], OEM.LSTM_ONLY, {
@@ -26,7 +27,7 @@ export async function ocrPdf(bytes: ArrayBuffer, onStatus: (status: string) => v
     langPath: '/tesseract/lang',
     workerBlobURL: false,
     logger: (m) => { if (current && m.status === 'recognizing text') onStatus(`${current} ${Math.round(m.progress * 100)}%`); },
-  }).catch(() => { throw new Error('Mesin OCR gagal dimuat. Aset OCR belum dipasang di server ini (npm run setup:ocr).'); });
+  }).catch(() => { throw new Error(tr('Mesin OCR gagal dimuat. Aset OCR belum dipasang di server ini (npm run setup:ocr).', 'The OCR engine failed to load. OCR assets are not installed on this server (npm run setup:ocr).')); });
 
   let doc: Awaited<ReturnType<typeof loadPdfDoc>> | undefined;
   try {
@@ -39,14 +40,14 @@ export async function ocrPdf(bytes: ArrayBuffer, onStatus: (status: string) => v
         pages.push({ words: [], text: existing, skipped: true });
         continue;
       }
-      current = `OCR halaman ${i}/${doc.numPages}…`;
+      current = tr(`OCR halaman ${i}/${doc.numPages}…`, `OCR page ${i}/${doc.numPages}…`);
       onStatus(current);
       const viewport = page.getViewport({ scale: OCR_SCALE });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas 2D context tidak tersedia di browser ini.');
+      if (!ctx) throw new Error(tr('Canvas 2D context tidak tersedia di browser ini.', 'Canvas 2D context is not available in this browser.'));
       // intent 'print' tidak memakai requestAnimationFrame, yang berhenti di tab latar belakang —
       // OCR banyak halaman tetap jalan walau pengguna pindah tab sambil menunggu.
       await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;

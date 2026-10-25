@@ -1,5 +1,6 @@
 import { loadPdfDoc } from './pdf-client';
 import type { TextEdit } from '../engines/edit-text';
+import { tr } from './i18n';
 
 interface Item { text: string; x: number; y: number }
 
@@ -42,7 +43,7 @@ export async function verifyTextEdits(before: ArrayBuffer, after: ArrayBuffer, e
       const kept = old.get(p)!.filter((it) => inRect(it, e.rect!) && norm(it.text) && norm(it.text) !== norm(e.text))
         .some((o) => now.get(p)!.some((n) => n.text === o.text && Math.abs(n.x - o.x) <= 0.5 && Math.abs(n.y - o.y) <= 0.5));
       if (kept || (inside && !norm(e.text).includes(inside))) {
-        problems.push(`Halaman ${p + 1}: teks lama masih terbaca di baris yang diedit — untuk data sensitif pakai Sensor PDF.`);
+        problems.push(tr(`Halaman ${p + 1}: teks lama masih terbaca di baris yang diedit — untuk data sensitif pakai Sensor PDF.`, `Page ${p + 1}: the old text is still readable in the edited line — for sensitive data use Redact PDF.`));
         break;
       }
     }
@@ -53,7 +54,7 @@ export async function verifyTextEdits(before: ArrayBuffer, after: ArrayBuffer, e
       .filter((it) => !newText.some((t) => norm(it.text) && t.includes(norm(it.text))))
       .map((it) => it.text).join(''));
     if (outside(old.get(p)!) !== outside(now.get(p)!)) {
-      problems.push(`Halaman ${p + 1}: teks lain di sekitar baris yang diedit ikut berubah — periksa hasilnya.`);
+      problems.push(tr(`Halaman ${p + 1}: teks lain di sekitar baris yang diedit ikut berubah — periksa hasilnya.`, `Page ${p + 1}: other text around the edited line changed too — check the result.`));
     }
   }
   return problems;

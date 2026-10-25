@@ -1,4 +1,5 @@
 import { zip } from 'fflate';
+import { tr } from './i18n';
 
 export interface ZipEntry {
   name: string;
@@ -10,7 +11,7 @@ export interface ZipEntry {
  * (contoh: `a.pdf`, `a-2.pdf`). Kompresi deflate, level 6.
  */
 export async function createZip(entries: ZipEntry[]): Promise<Blob> {
-  if (!entries.length) throw new Error('Tidak ada file untuk diarsipkan.');
+  if (!entries.length) throw new Error(tr('Tidak ada file untuk diarsipkan.', 'No files to archive.'));
 
   // Dedup nama file agar tidak saling menimpa di dalam arsip
   const used = new Map<string, number>();
@@ -28,7 +29,7 @@ export async function createZip(entries: ZipEntry[]): Promise<Blob> {
 
   return new Promise<Blob>((resolve, reject) => {
     zip(data, { level: 6 }, (err, out) => {
-      if (err) reject(err instanceof Error ? err : new Error('Gagal membuat arsip ZIP.'));
+      if (err) reject(err instanceof Error ? err : new Error(tr('Gagal membuat arsip ZIP.', 'Failed to create the ZIP archive.')));
       else resolve(new Blob([out], { type: 'application/zip' }));
     });
   });

@@ -4,6 +4,7 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from './PageViewer';
 import { moveFileGroup } from '../lib/reorder';
 import { useDragSort } from '../lib/use-drag-sort';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -57,7 +58,7 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
         setRefs(initialRefs);
         setLoading(false);
       } catch {
-        if (!cancelled) { setError('Gagal memuat salah satu dokumen.'); setLoading(false); }
+        if (!cancelled) { setError(tr('Gagal memuat salah satu dokumen.', 'Failed to load one of the documents.')); setLoading(false); }
       }
     };
     void load();
@@ -99,7 +100,7 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
       } catch (reason) {
         tasks.current.delete(key);
         if (!cancelled && !(reason instanceof Error && reason.name === 'RenderingCancelledException')) {
-          setError('Gagal merender beberapa halaman.');
+          setError(tr('Gagal merender beberapa halaman.', 'Failed to render some pages.'));
         }
       }
     };
@@ -148,18 +149,18 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
     });
   };
 
-  if (loading) return <div className="annotate-loading">Memuat {files.length} dokumen…</div>;
+  if (loading) return <div className="annotate-loading">{tr(`Memuat ${files.length} dokumen…`, `Loading ${files.length} document(s)…`)}</div>;
   if (error) return <div className="preview-error" role="alert">{error}</div>;
 
   return (
     <div className="split-panel">
       <div className="preview-heading">
-        <span>{validRefs.length} halaman dari {files.length} dokumen</span>
-        <small>{mode === 'halaman' ? 'Tahan lalu seret kartu untuk mengatur urutan' : 'Gunakan ↑↓ untuk memindahkan file'}</small>
+        <span>{tr(`${validRefs.length} halaman dari ${files.length} dokumen`, `${validRefs.length} pages from ${files.length} document(s)`)}</span>
+        <small>{mode === 'halaman' ? tr('Tahan lalu seret kartu untuk mengatur urutan', 'Press and drag cards to set the order') : tr('Gunakan ↑↓ untuk memindahkan file', 'Use ↑↓ to move files')}</small>
       </div>
-      <div className="split-tabs" role="tablist" aria-label="Mode pengurutan gabungan">
-        <button role="tab" aria-selected={mode === 'halaman'} className={`split-tab ${mode === 'halaman' ? 'is-active' : ''}`} onClick={() => setMode('halaman')}>Per halaman</button>
-        <button role="tab" aria-selected={mode === 'file'} className={`split-tab ${mode === 'file' ? 'is-active' : ''}`} onClick={() => setMode('file')}>Per file</button>
+      <div className="split-tabs" role="tablist" aria-label={tr('Mode pengurutan gabungan', 'Merge ordering mode')}>
+        <button role="tab" aria-selected={mode === 'halaman'} className={`split-tab ${mode === 'halaman' ? 'is-active' : ''}`} onClick={() => setMode('halaman')}>{tr('Per halaman', 'By page')}</button>
+        <button role="tab" aria-selected={mode === 'file'} className={`split-tab ${mode === 'file' ? 'is-active' : ''}`} onClick={() => setMode('file')}>{tr('Per file', 'By file')}</button>
       </div>
       <div className="merge-legend">
         {files.map((f, i) => pageCounts[i] ? (
@@ -199,7 +200,7 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
               </div>
               <div className="merge-card-foot">
                 <span className="merge-pos">{index + 1}</span>
-                <button type="button" className="merge-delete-btn" aria-label={`Hapus halaman ${index + 1}`} onClick={() => deleteRef(ref)} disabled={validRefs.length <= 1}>✕</button>
+                <button type="button" className="merge-delete-btn" aria-label={tr(`Hapus halaman ${index + 1}`, `Remove page ${index + 1}`)} onClick={() => deleteRef(ref)} disabled={validRefs.length <= 1}>✕</button>
               </div>
             </article>
           );
@@ -221,18 +222,18 @@ export function MergePanel({ files, onProcess, busy }: MergePanelProps) {
           >
             <span className="merge-legend-dot" style={{ background: FILE_COLORS[fi % FILE_COLORS.length] }} />
             <span className="merge-file-name">{files[fi].name}</span>
-            <small>{pageCounts[fi]} halaman</small>
+            <small>{tr(`${pageCounts[fi]} halaman`, `${pageCounts[fi]} pages`)}</small>
             <span className="reorder-buttons">
-              <button type="button" aria-label={`Naikkan ${files[fi].name}`} disabled={gi === 0} onClick={() => moveGroupTo(gi, gi - 1)}>↑</button>
-              <button type="button" aria-label={`Turunkan ${files[fi].name}`} disabled={gi === groupOrder.length - 1} onClick={() => moveGroupTo(gi, gi + 1)}>↓</button>
+              <button type="button" aria-label={tr(`Naikkan ${files[fi].name}`, `Move ${files[fi].name} up`)} disabled={gi === 0} onClick={() => moveGroupTo(gi, gi - 1)}>↑</button>
+              <button type="button" aria-label={tr(`Turunkan ${files[fi].name}`, `Move ${files[fi].name} down`)} disabled={gi === groupOrder.length - 1} onClick={() => moveGroupTo(gi, gi + 1)}>↓</button>
             </span>
           </div>
         ))}
       </div>
       )}
-      <p className="split-hint">Urutan akhir: {validRefs.map((r) => pageCounts.slice(0, r.file).reduce((a, b) => a + b, 0) + r.page + 1).join(' → ')}</p>
+      <p className="split-hint">{tr('Urutan akhir', 'Final order')}: {validRefs.map((r) => pageCounts.slice(0, r.file).reduce((a, b) => a + b, 0) + r.page + 1).join(' → ')}</p>
       <button className="primary" onClick={() => onProcess(validRefs)} disabled={busy || validRefs.length < 1}>
-        {busy ? 'Memproses…' : `Gabungkan ${validRefs.length} halaman`}
+        {busy ? tr('Memproses…', 'Processing…') : tr(`Gabungkan ${validRefs.length} halaman`, `Merge ${validRefs.length} pages`)}
       </button>
       {viewing && pageCounts[viewing.file] && (
         <PageViewer

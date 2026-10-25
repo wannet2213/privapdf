@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { boxFromMargins, isZeroMargins, marginsFromBox, resizeCropBox, type Box, type CropHandle, type Margins } from '../lib/crop-box';
+import { tr } from '../lib/i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -60,7 +61,7 @@ export function PageViewer({ bytes, pageNumber, totalPages, onClose, onPageChang
         docRef.current = doc;
         setLoading(false);
       })
-      .catch(() => { if (!cancelled) { setError('Gagal memuat dokumen.'); setLoading(false); } });
+      .catch(() => { if (!cancelled) { setError(tr('Gagal memuat dokumen.', 'Failed to load the document.')); setLoading(false); } });
     return () => {
       cancelled = true;
       taskRef.current?.cancel();
@@ -83,7 +84,7 @@ export function PageViewer({ bytes, pageNumber, totalPages, onClose, onPageChang
         const base = page.getViewport({ scale: 1 });
         setPagePts({ w: base.width, h: base.height });
         const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Canvas tidak tersedia.');
+        if (!ctx) throw new Error(tr('Canvas tidak tersedia.', 'Canvas is not available.'));
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
         const task = page.render({ canvasContext: ctx, viewport });
@@ -98,7 +99,7 @@ export function PageViewer({ bytes, pageNumber, totalPages, onClose, onPageChang
         }
       } catch (reason) {
         if (!cancelled && !(reason instanceof Error && reason.name === 'RenderingCancelledException')) {
-          setError('Gagal merender halaman.');
+          setError(tr('Gagal merender halaman.', 'Failed to render the page.'));
         }
       }
     };
@@ -154,14 +155,14 @@ export function PageViewer({ bytes, pageNumber, totalPages, onClose, onPageChang
     <div className="page-viewer-overlay" onClick={onClose}>
       <div className="page-viewer" onClick={(e) => e.stopPropagation()}>
         <div className="page-viewer-bar">
-          <button className="page-viewer-nav" disabled={pageNumber === 0} onClick={() => onPageChange(pageNumber - 1)} aria-label="Halaman sebelumnya">‹</button>
+          <button className="page-viewer-nav" disabled={pageNumber === 0} onClick={() => onPageChange(pageNumber - 1)} aria-label={tr('Halaman sebelumnya', 'Previous page')}>‹</button>
           <span className="page-viewer-count">{pageNumber + 1} / {totalPages}</span>
-          <button className="page-viewer-nav" disabled={pageNumber >= totalPages - 1} onClick={() => onPageChange(pageNumber + 1)} aria-label="Halaman berikutnya">›</button>
-          {crop && <span className="page-viewer-crop-hint">Mode potong aktif, seret kotak</span>}
-          <button className="page-viewer-close" onClick={onClose} aria-label="Tutup">✕</button>
+          <button className="page-viewer-nav" disabled={pageNumber >= totalPages - 1} onClick={() => onPageChange(pageNumber + 1)} aria-label={tr('Halaman berikutnya', 'Next page')}>›</button>
+          {crop && <span className="page-viewer-crop-hint">{tr('Mode potong aktif, seret kotak', 'Crop mode on, drag the box')}</span>}
+          <button className="page-viewer-close" onClick={onClose} aria-label={tr('Tutup', 'Close')}>✕</button>
         </div>
         <div className="page-viewer-canvas-wrap">
-          {loading && <div className="page-viewer-loading">Memuat dokumen…</div>}
+          {loading && <div className="page-viewer-loading">{tr('Memuat dokumen…', 'Loading document…')}</div>}
           {error && <div className="page-viewer-error">{error}</div>}
           <div className="page-viewer-stack" ref={stackRef}>
             <canvas ref={canvasRef} className="page-viewer-canvas" />

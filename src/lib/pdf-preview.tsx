@@ -3,6 +3,7 @@ import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFPagePr
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PageViewer } from '../components/PageViewer';
 import { useDragSort } from './use-drag-sort';
+import { tr } from './i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -32,12 +33,12 @@ export function PdfPreview({ bytes, pages, selected, onToggle, onMove }: PdfPrev
     let cancelled = false;
     setError(undefined); setLoaded(false); setRendered(new Set());
     const loading = bytes.byteLength <= MAX_PREVIEW_BYTES ? getDocument({ data: new Uint8Array(bytes.slice(0)) }) : undefined;
-    if (!loading) { setError('PDF terlalu besar untuk preview (maksimal 100 MB).'); return; }
+    if (!loading) { setError(tr('PDF terlalu besar untuk preview (maksimal 100 MB).', 'PDF is too large to preview (max 100 MB).')); return; }
     loading.promise.then((pdf) => {
       if (cancelled) { void pdf.destroy(); return; }
-      if (pdf.numPages > MAX_PREVIEW_PAGES) { setError('PDF memiliki terlalu banyak halaman untuk preview.'); void pdf.destroy(); return; }
+      if (pdf.numPages > MAX_PREVIEW_PAGES) { setError(tr('PDF memiliki terlalu banyak halaman untuk preview.', 'The PDF has too many pages to preview.')); void pdf.destroy(); return; }
       documentRef.current = pdf; setLoaded(true);
-    }).catch(() => { if (!cancelled) setError('PDF tidak valid atau rusak.'); });
+    }).catch(() => { if (!cancelled) setError(tr('PDF tidak valid atau rusak.', 'The PDF is invalid or damaged.')); });
     return () => { cancelled = true; tasks.current.forEach((task) => task.cancel()); tasks.current.clear(); documentRef.current?.destroy(); documentRef.current = undefined; canvases.current.forEach((canvas) => { canvas.width = 0; canvas.height = 0; }); canvases.current.clear(); cards.current.clear(); };
   }, [bytes]);
 
@@ -52,12 +53,12 @@ export function PdfPreview({ bytes, pages, selected, onToggle, onMove }: PdfPrev
         if (cancelled) { page.cleanup(); return; }
         const viewport = page.getViewport({ scale: PREVIEW_SCALE });
         const context = canvas.getContext('2d');
-        if (!context) throw new Error('Canvas preview tidak tersedia di browser ini.');
+        if (!context) throw new Error(tr('Canvas preview tidak tersedia di browser ini.', 'Preview canvas is not available in this browser.'));
         canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
         const task = page.render({ canvasContext: context, viewport }); tasks.current.set(item.page, task);
         await task.promise; tasks.current.delete(item.page); page.cleanup();
         if (!cancelled) setRendered((current) => new Set(current).add(item.page));
-      } catch (reason) { tasks.current.delete(item.page); if (!cancelled && !(reason instanceof Error && reason.name === 'RenderingCancelledException')) setError(reason instanceof Error ? reason.message : 'Preview PDF gagal dirender.'); }
+      } catch (reason) { tasks.current.delete(item.page); if (!cancelled && !(reason instanceof Error && reason.name === 'RenderingCancelledException')) setError(reason instanceof Error ? reason.message : tr('Preview PDF gagal dirender.', 'Failed to render the PDF preview.')); }
     };
     const observer = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver((entries) => entries.forEach((entry) => { if (entry.isIntersecting) { const page = Number((entry.target as HTMLElement).dataset.pageNumber); const item = pages.find((candidate) => candidate.page === page); if (item) void render(item); } }), { rootMargin: '300px' });
     cards.current.forEach((card) => observer?.observe(card));
@@ -80,7 +81,7 @@ export function PdfPreview({ bytes, pages, selected, onToggle, onMove }: PdfPrev
         <span className="page-thumb-zoom" aria-hidden="true">⤢</span>
       </div>
       <label><input type="checkbox" checked={selected.includes(page.page)} onChange={() => onToggle(page.page)} />{page.label}</label>
-      <div className="reorder-buttons"><button type="button" aria-label={`Naikkan halaman ${page.page + 1}`} disabled={index === 0} onClick={() => onMove(index, index - 1)}>↑</button><button type="button" aria-label={`Turunkan halaman ${page.page + 1}`} disabled={index === pages.length - 1} onClick={() => onMove(index, index + 1)}>↓</button></div>
+      <div className="reorder-buttons"><button type="button" aria-label={tr(`Naikkan halaman ${page.page + 1}`, `Move page ${page.page + 1} up`)} disabled={index === 0} onClick={() => onMove(index, index - 1)}>↑</button><button type="button" aria-label={tr(`Turunkan halaman ${page.page + 1}`, `Move page ${page.page + 1} down`)} disabled={index === pages.length - 1} onClick={() => onMove(index, index + 1)}>↓</button></div>
     </article>)}
     {viewing !== null && documentRef.current && (
       <PageViewer bytes={bytes} pageNumber={viewing} totalPages={documentRef.current.numPages} onClose={() => setViewing(null)} onPageChange={setViewing} />

@@ -3,6 +3,8 @@
  * via canvas. Re-encode menghapus metadata EXIF (GPS, perangkat kamera).
  */
 
+import { tr } from './i18n';
+
 export type ImageFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
 export const FORMAT_EXT: Record<ImageFormat, string> = {
@@ -57,7 +59,7 @@ export async function convertImage(
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas 2D tidak tersedia di browser ini.');
+    if (!ctx) throw new Error(tr('Canvas 2D tidak tersedia di browser ini.', 'Canvas 2D is not available in this browser.'));
     // JPEG tidak punya transparansi — isi putih agar area alpha tidak jadi hitam.
     if (opts.format === 'image/jpeg') {
       ctx.fillStyle = '#ffffff';
@@ -67,7 +69,7 @@ export async function convertImage(
     overlay?.(ctx, width, height);
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error('Gagal mengenkode gambar.'))),
+        (b) => (b ? resolve(b) : reject(new Error(tr('Gagal mengenkode gambar.', 'Failed to encode the image.')))),
         opts.format,
         opts.format === 'image/png' ? undefined : opts.quality,
       );

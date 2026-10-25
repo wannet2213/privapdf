@@ -5,6 +5,7 @@ import {
 import fontkit from '@pdf-lib/fontkit';
 import { createPdfToolkit, PdfPasswordError, type PdfToolkit } from 'pdfstudio';
 import { parseOps, type Op } from '../lib/content-stream';
+import { tr } from '../lib/i18n';
 
 let unlockToolkitPromise: Promise<PdfToolkit> | undefined;
 function getUnlockToolkit() {
@@ -32,7 +33,7 @@ export async function splitPdfEach(input: ArrayBuffer, indices: number[]): Promi
   const doc = await PDFDocument.load(input);
   const pageCount = doc.getPageCount();
   const valid = indices.filter((i) => i >= 0 && i < pageCount);
-  if (!valid.length) throw new Error('Tidak ada halaman valid untuk diekstrak.');
+  if (!valid.length) throw new Error(tr('Tidak ada halaman valid untuk diekstrak.', 'No valid pages to extract.'));
   const outputs: ArrayBuffer[] = [];
   for (const index of valid) outputs.push(await extractPages(doc, [index]));
   return outputs;
@@ -45,7 +46,7 @@ export async function splitPdfRanges(input: ArrayBuffer, ranges: [number, number
   const outputs: ArrayBuffer[] = [];
   for (const [start, end] of ranges) {
     if (start < 0 || end >= pageCount || start > end) {
-      throw new Error(`Rentang ${start + 1}-${end + 1} tidak valid untuk ${pageCount} halaman.`);
+      throw new Error(tr(`Rentang ${start + 1}-${end + 1} tidak valid untuk ${pageCount} halaman.`, `Range ${start + 1}-${end + 1} is not valid for ${pageCount} pages.`));
     }
     const indices: number[] = [];
     for (let i = start; i <= end; i++) indices.push(i);
@@ -63,12 +64,12 @@ export async function splitPdfGroups(input: ArrayBuffer, groups: number[][]): Pr
     if (!group.length) continue;
     for (const idx of group) {
       if (idx < 0 || idx >= pageCount) {
-        throw new Error(`Halaman ${idx + 1} berada di luar batas dokumen (${pageCount} halaman).`);
+        throw new Error(tr(`Halaman ${idx + 1} berada di luar batas dokumen (${pageCount} halaman).`, `Page ${idx + 1} is outside the document (${pageCount} pages).`));
       }
     }
     outputs.push(await extractPages(doc, group));
   }
-  if (!outputs.length) throw new Error('Tidak ada kelompok halaman valid.');
+  if (!outputs.length) throw new Error(tr('Tidak ada kelompok halaman valid.', 'No valid page groups.'));
   return outputs;
 }
 
@@ -93,7 +94,7 @@ export async function rotatePdf(input: ArrayBuffer, angleOrOpts: number | Rotate
   if (opts.pages?.length) {
     for (const i of opts.pages) {
       if (!Number.isInteger(i) || i < 0 || i >= pages.length) {
-        throw new Error(`Indeks halaman rotasi tidak valid: ${i}`);
+        throw new Error(tr(`Indeks halaman rotasi tidak valid: ${i}`, `Invalid rotation page index: ${i}`));
       }
     }
     for (const i of new Set(opts.pages)) {
@@ -131,7 +132,7 @@ async function addJpegPage(doc: PDFDocument, jpg: ArrayBuffer, scale: number) {
 // tersensor, mis. balasan komentar (/IRT) atau field formulir (/Kids) yang nilainya ada di sana.
 const REDACT_PAGE_KEYS = new Set(['Type', 'Parent', 'MediaBox', 'CropBox', 'BleedBox', 'TrimBox', 'ArtBox', 'Rotate', 'Contents', 'Resources', 'Group', 'UserUnit']);
 
-const UNREADABLE_CONTENT = 'Isi salah satu halaman tidak bisa dibaca, jadi tidak bisa dipastikan sisa halaman lain ikut terbuang. Proses dibatalkan.';
+const UNREADABLE_CONTENT = tr('Isi salah satu halaman tidak bisa dibaca, jadi tidak bisa dipastikan sisa halaman lain ikut terbuang. Proses dibatalkan.', 'The content of one page could not be read, so it cannot be confirmed that leftovers of other pages were dropped. Process cancelled.');
 const RESOURCES = PDFName.of('Resources');
 const RESOURCE_CATEGORIES = new Set(['Font', 'XObject', 'ExtGState', 'Shading', 'ColorSpace', 'Pattern', 'Properties']);
 
@@ -313,7 +314,7 @@ async function extractPages(doc: PDFDocument, indices: number[]): Promise<ArrayB
 export async function redactPdf(input: ArrayBuffer, jpgs: Map<number, ArrayBuffer>, scale: number): Promise<ArrayBuffer> {
   const src = await PDFDocument.load(input);
   // Indeks di luar dokumen berarti preview dan mesin tidak sepakat soal halaman: jangan diam-diam lewat.
-  for (const i of jpgs.keys()) if (!Number.isInteger(i) || i < 0 || i >= src.getPageCount()) throw new Error(`Halaman ${i + 1} yang disensor tidak ada di dokumen.`);
+  for (const i of jpgs.keys()) if (!Number.isInteger(i) || i < 0 || i >= src.getPageCount()) throw new Error(tr(`Halaman ${i + 1} yang disensor tidak ada di dokumen.`, `Redacted page ${i + 1} does not exist in the document.`));
   for (const page of src.getPages()) {
     for (const [key] of page.node.entries()) if (!REDACT_PAGE_KEYS.has(key.decodeText())) page.node.delete(key);
   }
@@ -335,7 +336,7 @@ export async function deletePages(input: ArrayBuffer, indices: number[]): Promis
   const pageCount = doc.getPageCount();
   const toDelete = new Set(indices.filter((i) => i >= 0 && i < pageCount));
   const keep = Array.from({ length: pageCount }, (_, i) => i).filter((i) => !toDelete.has(i));
-  if (!keep.length) throw new Error('Tidak dapat menghapus semua halaman dari dokumen.');
+  if (!keep.length) throw new Error(tr('Tidak dapat menghapus semua halaman dari dokumen.', 'Cannot delete every page of the document.'));
   return extractPages(doc, keep);
 }
 
@@ -344,7 +345,7 @@ export async function reorderPages(input: ArrayBuffer, order: number[]): Promise
   const doc = await PDFDocument.load(input);
   const pageCount = doc.getPageCount();
   const valid = order.filter((i) => i >= 0 && i < pageCount);
-  if (!valid.length) throw new Error('Urutan halaman tidak valid.');
+  if (!valid.length) throw new Error(tr('Urutan halaman tidak valid.', 'Page order is not valid.'));
   const out = await PDFDocument.create();
   const pages = await out.copyPages(doc, valid);
   pages.forEach((p) => out.addPage(p));
@@ -652,7 +653,7 @@ export async function addWatermark(input: ArrayBuffer, opts: WatermarkOptions): 
   }
 
   const text = opts.text ?? '';
-  if (!text.trim()) throw new Error('Teks tanda air tidak boleh kosong.');
+  if (!text.trim()) throw new Error(tr('Teks tanda air tidak boleh kosong.', 'Watermark text must not be empty.'));
   // Spasi huruf bisa negatif (merapatkan); dibatasi agar karakter tidak bertumpuk terbalik
   const spacing = Math.max(-(opts.fontSize ?? 50) * 0.5, opts.letterSpacing ?? 0);
   const lineHeight = opts.lineHeight ?? 1.2;
@@ -663,7 +664,7 @@ export async function addWatermark(input: ArrayBuffer, opts: WatermarkOptions): 
     try {
       font = await doc.embedFont(opts.customFontBytes, { subset: true });
     } catch {
-      throw new Error('Font yang diunggah tidak dapat diproses. Gunakan file TTF atau OTF yang valid.');
+      throw new Error(tr('Font yang diunggah tidak dapat diproses. Gunakan file TTF atau OTF yang valid.', 'The uploaded font cannot be processed. Use a valid TTF or OTF file.'));
     }
   } else {
     const def = getFontDef(opts.font || 'helvetica-bold');
@@ -776,11 +777,11 @@ export async function cropPages(input: ArrayBuffer, opts: CropOptions): Promise<
     const bottom = c.bottom ?? 0;
     const left = c.left ?? 0;
     const right = c.right ?? 0;
-    if (top < 0 || bottom < 0 || left < 0 || right < 0) throw new Error('Margin crop tidak boleh negatif.');
+    if (top < 0 || bottom < 0 || left < 0 || right < 0) throw new Error(tr('Margin crop tidak boleh negatif.', 'Crop margins must not be negative.'));
     const { width, height } = page.getSize();
     const newWidth = width - left - right;
     const newHeight = height - top - bottom;
-    if (newWidth <= 0 || newHeight <= 0) throw new Error('Margin crop terlalu besar untuk salah satu halaman.');
+    if (newWidth <= 0 || newHeight <= 0) throw new Error(tr('Margin crop terlalu besar untuk salah satu halaman.', 'Crop margins are too large for one of the pages.'));
     page.setCropBox(left, bottom, newWidth, newHeight);
   };
 
@@ -788,9 +789,9 @@ export async function cropPages(input: ArrayBuffer, opts: CropOptions): Promise<
     const seen = new Set<number>();
     for (const c of opts.pages) {
       if (!Number.isInteger(c.index) || c.index < 0 || c.index >= pages.length) {
-        throw new Error(`Indeks halaman crop tidak valid: ${c.index}`);
+        throw new Error(tr(`Indeks halaman crop tidak valid: ${c.index}`, `Invalid crop page index: ${c.index}`));
       }
-      if (seen.has(c.index)) throw new Error(`Indeks halaman crop duplikat: ${c.index}`);
+      if (seen.has(c.index)) throw new Error(tr(`Indeks halaman crop duplikat: ${c.index}`, `Duplicate crop page index: ${c.index}`));
       seen.add(c.index);
     }
     for (const c of opts.pages) apply(pages[c.index], c);
@@ -820,7 +821,7 @@ export async function unlockPdf(input: ArrayBuffer, password?: string): Promise<
       return toArrayBuffer(out);
     } catch (error) {
       if (error instanceof PdfPasswordError) {
-        throw new Error('PDF ini memerlukan password untuk dibuka.');
+        throw new Error(tr('PDF ini memerlukan password untuk dibuka.', 'This PDF needs a password to open.'));
       }
       throw error;
     }
@@ -831,7 +832,7 @@ export async function unlockPdf(input: ArrayBuffer, password?: string): Promise<
     return toArrayBuffer(out);
   } catch (error) {
     if (error instanceof PdfPasswordError) {
-      throw new Error('Password salah. Periksa kembali password PDF Anda.');
+      throw new Error(tr('Password salah. Periksa kembali password PDF Anda.', 'Wrong password. Check your PDF password again.'));
     }
     throw error;
   }
@@ -851,7 +852,7 @@ export interface ProtectOptions {
 
 /** Enkripsi PDF dengan password (AES-256 via qpdf) — pasangan unlockPdf. */
 export async function protectPdf(input: ArrayBuffer, opts: ProtectOptions): Promise<ArrayBuffer> {
-  if (!opts.password) throw new Error('Password tidak boleh kosong.');
+  if (!opts.password) throw new Error(tr('Password tidak boleh kosong.', 'Password must not be empty.'));
   const toolkit = await getUnlockToolkit();
   try {
     const out = await toolkit.lock(input, {
@@ -861,7 +862,7 @@ export async function protectPdf(input: ArrayBuffer, opts: ProtectOptions): Prom
     return toArrayBuffer(out);
   } catch (error) {
     if (error instanceof PdfPasswordError) {
-      throw new Error('PDF sudah terenkripsi. Hapus proteksi dulu sebelum memberi password baru.');
+      throw new Error(tr('PDF sudah terenkripsi. Hapus proteksi dulu sebelum memberi password baru.', 'The PDF is already encrypted. Unlock it first before setting a new password.'));
     }
     throw error;
   }
@@ -893,7 +894,7 @@ export async function stampImage(input: ArrayBuffer, opts: StampOptions): Promis
   const doc = await PDFDocument.load(input);
   const pages = doc.getPages();
   const targets = opts.pages.map((index) => pages[index]).filter((page): page is PDFPage => Boolean(page));
-  if (!targets.length) throw new Error('Tidak ada halaman valid untuk ditempeli gambar.');
+  if (!targets.length) throw new Error(tr('Tidak ada halaman valid untuk ditempeli gambar.', 'No valid pages to place the image on.'));
   const image = opts.imageType === 'png' ? await doc.embedPng(opts.imageBytes) : await doc.embedJpg(opts.imageBytes);
   for (const page of targets) {
     const { width, height } = page.getSize();
@@ -962,7 +963,7 @@ export async function fillForm(input: ArrayBuffer, values: Record<string, string
 /** Ratakan semua form/annotation menjadi konten statis — pakai qpdf WASM (pdfstudio). */
 export async function flattenForm(input: ArrayBuffer): Promise<ArrayBuffer> {
   const src = await PDFDocument.load(input, { ignoreEncryption: true, updateMetadata: false });
-  if (src.isEncrypted) throw new Error('PDF ini terkunci. Buka dulu dengan Hapus proteksi, lalu ratakan.');
+  if (src.isEncrypted) throw new Error(tr('PDF ini terkunci. Buka dulu dengan Hapus proteksi, lalu ratakan.', 'This PDF is locked. Open it with Unlock PDF first, then flatten.'));
   // qpdf hanya membuatkan appearance field teks/pilihan yang belum punya bila NeedAppearances true;
   // tanpa itu nilainya tidak bisa jadi konten statis dan ikut terbuang di bawah.
   const missingAp = src.getPages().some((p) => (arrayAt(src.context, p.node.get(PDFName.of('Annots'))) ?? [])
@@ -1003,7 +1004,7 @@ export async function sanitizePdf(input: ArrayBuffer): Promise<ArrayBuffer> {
   // merusak dokumen, membiarkannya berarti skripnya ikut. Tolak saja.
   const acroForm = dictAt(context, catalog.get(PDFName.of('AcroForm')));
   if (acroForm?.has(PDFName.of('XFA')) && (context.lookup(catalog.get(PDFName.of('NeedsRendering'))) === PDFBool.True || !arrayAt(context, acroForm.get(PDFName.of('Fields')))?.length)) {
-    throw new Error('PDF ini formulir XFA dinamis: isinya hanya ada di XFA, jadi tidak bisa dibersihkan tanpa merusak dokumen.');
+    throw new Error(tr('PDF ini formulir XFA dinamis: isinya hanya ada di XFA, jadi tidak bisa dibersihkan tanpa merusak dokumen.', 'This PDF is a dynamic XFA form: its content only lives in XFA, so it cannot be sanitized without breaking the document.'));
   }
   context.trailerInfo.Info = undefined;
   catalog.delete(PDFName.of('OpenAction'));
@@ -1158,16 +1159,16 @@ export async function addTextLayer(input: ArrayBuffer, pages: TextLayerWord[][])
  * Memungkinkan reorder lintas-dokumen dan penghapusan halaman.
  */
 export async function mergePages(inputs: ArrayBuffer[], refs: PageRef[]): Promise<ArrayBuffer> {
-  if (!inputs.length) throw new Error('Tidak ada dokumen untuk digabungkan.');
-  if (!refs.length) throw new Error('Tidak ada halaman yang dipilih untuk digabungkan.');
+  if (!inputs.length) throw new Error(tr('Tidak ada dokumen untuk digabungkan.', 'No documents to merge.'));
+  if (!refs.length) throw new Error(tr('Tidak ada halaman yang dipilih untuk digabungkan.', 'No pages selected to merge.'));
   const out = await PDFDocument.create();
   const cache = new Map<number, PDFDocument>();
   for (const ref of refs) {
-    if (ref.file < 0 || ref.file >= inputs.length) throw new Error(`Dokumen ke-${ref.file + 1} tidak tersedia.`);
+    if (ref.file < 0 || ref.file >= inputs.length) throw new Error(tr(`Dokumen ke-${ref.file + 1} tidak tersedia.`, `Document ${ref.file + 1} is not available.`));
     let doc = cache.get(ref.file);
     if (!doc) { doc = await PDFDocument.load(inputs[ref.file]); cache.set(ref.file, doc); }
     const count = doc.getPageCount();
-    if (ref.page < 0 || ref.page >= count) throw new Error(`Halaman ${ref.page + 1} tidak ada pada dokumen ${ref.file + 1}.`);
+    if (ref.page < 0 || ref.page >= count) throw new Error(tr(`Halaman ${ref.page + 1} tidak ada pada dokumen ${ref.file + 1}.`, `Page ${ref.page + 1} does not exist in document ${ref.file + 1}.`));
     const [copied] = await out.copyPages(doc, [ref.page]);
     out.addPage(copied);
   }

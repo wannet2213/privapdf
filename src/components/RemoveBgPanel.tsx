@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { applyKey, cornerColor, flattenOnColor } from '../lib/remove-bg';
 import { removeBackgroundAI, type BgModelQuality } from '../lib/remove-bg-ai';
 import { removeBackgroundImgly, type ImglyModel } from '../lib/remove-bg-imgly';
+import { tr } from '../lib/i18n';
 
 interface RemoveBgPanelProps {
   bytes: ArrayBuffer;
@@ -12,10 +13,10 @@ interface RemoveBgPanelProps {
 
 // Merah/biru: kebutuhan umum pas foto; warna lain lewat pemilih warna.
 const BG_PRESETS: { label: string; value: string | null }[] = [
-  { label: 'Transparan', value: null },
-  { label: 'Putih', value: '#ffffff' },
-  { label: 'Merah', value: '#db1f26' },
-  { label: 'Biru', value: '#1d4fa3' },
+  { label: tr('Transparan', 'Transparent'), value: null },
+  { label: tr('Putih', 'White'), value: '#ffffff' },
+  { label: tr('Merah', 'Red'), value: '#db1f26' },
+  { label: tr('Biru', 'Blue'), value: '#1d4fa3' },
 ];
 
 const rgbHex = (c: [number, number, number]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -78,7 +79,7 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
         setReady(true);
       })
       .catch(() => {
-        if (!cancelled) setError('Gambar tidak valid atau rusak.');
+        if (!cancelled) setError(tr('Gambar tidak valid atau rusak.', 'The image is invalid or damaged.'));
       });
     return () => {
       cancelled = true;
@@ -114,7 +115,7 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
       ctx.putImageData(image, 0, 0);
       onProcess(await off.convertToBlob({ type: 'image/png' }), background);
     } catch {
-      setError('Gagal menerapkan warna latar.');
+      setError(tr('Gagal menerapkan warna latar.', 'Failed to apply the background color.'));
     }
   };
 
@@ -123,7 +124,7 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
     if (!canvas) return;
     canvas.toBlob((blob) => {
       if (!blob) {
-        setError('Gagal membuat PNG.');
+        setError(tr('Gagal membuat PNG.', 'Failed to create the PNG.'));
         return;
       }
       void finish(blob);
@@ -167,7 +168,7 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
       setResultBlob(blob);
       setResultUrl(URL.createObjectURL(blob));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Konversi gagal.');
+      setError(e instanceof Error ? e.message : tr('Konversi gagal.', 'Conversion failed.'));
     }
     stopTicker();
     setStatusText('');
@@ -180,10 +181,10 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
 
   // Pratinjau: warna latar CSS di belakang gambar transparan — tanpa memproses ulang piksel.
   const previewBg = background ? { backgroundColor: background } : undefined;
-  const downloadLabel = background ? 'Unduh PNG berlatar warna →' : 'Unduh PNG transparan →';
+  const downloadLabel = background ? tr('Unduh PNG berlatar warna →', 'Download PNG with color background →') : tr('Unduh PNG transparan →', 'Download transparent PNG →');
   const backgroundPicker = (
     <fieldset className="tool-form-field removebg-bg">
-      <legend className="tool-form-label">Latar hasil</legend>
+      <legend className="tool-form-label">{tr('Latar hasil', 'Result background')}</legend>
       <div className="removebg-color-row">
         {BG_PRESETS.map((p) => (
           <button key={p.label} type="button" className={`ghost-btn ${background === p.value ? 'is-active' : ''}`} aria-pressed={background === p.value} disabled={busy} onClick={() => setBackground(p.value)}>
@@ -192,8 +193,8 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
           </button>
         ))}
         <label className="removebg-custom">
-          <input type="color" value={background ?? '#ffffff'} disabled={busy} onChange={(e) => setBackground(e.target.value)} aria-label="Warna latar lain" />
-          Warna lain
+          <input type="color" value={background ?? '#ffffff'} disabled={busy} onChange={(e) => setBackground(e.target.value)} aria-label={tr('Warna latar lain', 'Other background color')} />
+          {tr('Warna lain', 'Other color')}
         </label>
       </div>
     </fieldset>
@@ -204,49 +205,48 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
   return (
     <div className="split-panel">
       <div className="preview-heading">
-        <span>Hapus latar</span>
-        <small>{mode === 'ai' ? 'Model AI memisahkan objek dari latar apa pun' : 'Untuk latar warna solid: foto produk, logo, tangkapan layar'}</small>
+        <span>{tr('Hapus latar', 'Remove background')}</span>
+        <small>{mode === 'ai' ? tr('Model AI memisahkan objek dari latar apa pun', 'An AI model separates the subject from any background') : tr('Untuk latar warna solid: foto produk, logo, tangkapan layar', 'For solid color backgrounds: product photos, logos, screenshots')}</small>
       </div>
-      <div className="split-tabs" role="tablist" aria-label="Metode hapus latar">
-        <button role="tab" aria-selected={mode === 'ai'} className={`split-tab ${mode === 'ai' ? 'is-active' : ''}`} onClick={() => setMode('ai')}>AI (hasil maksimal)</button>
-        <button role="tab" aria-selected={mode === 'solid'} className={`split-tab ${mode === 'solid' ? 'is-active' : ''}`} onClick={() => setMode('solid')}>Warna solid</button>
+      <div className="split-tabs" role="tablist" aria-label={tr('Metode hapus latar', 'Background removal method')}>
+        <button role="tab" aria-selected={mode === 'ai'} className={`split-tab ${mode === 'ai' ? 'is-active' : ''}`} onClick={() => setMode('ai')}>{tr('AI (hasil maksimal)', 'AI (best result)')}</button>
+        <button role="tab" aria-selected={mode === 'solid'} className={`split-tab ${mode === 'solid' ? 'is-active' : ''}`} onClick={() => setMode('solid')}>{tr('Warna solid', 'Solid color')}</button>
       </div>
 
       {mode === 'ai' ? (
         <>
           <p className="split-hint">
-            Empat varian model, semuanya berjalan lokal di browser. Runtime ONNX (±11 MB) diunduh sekali;
-            setelah itu hanya model yang kamu pilih.
+            {tr('Empat varian model, semuanya berjalan lokal di browser. Runtime ONNX (±11 MB) diunduh sekali; setelah itu hanya model yang kamu pilih.', 'Four model variants, all running locally in the browser. The ONNX runtime (±11 MB) downloads once; after that only the model you pick.')}
           </p>
           <div className="tool-form">
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="rb-quality">Kualitas model</label>
+              <label className="tool-form-label" htmlFor="rb-quality">{tr('Kualitas model', 'Model quality')}</label>
               <select id="rb-quality" className="tool-form-input" value={quality} disabled={aiBusy || busy} onChange={(e) => setQuality(e.target.value as BgModelQuality)}>
-                <option value="imgly-fp32">Maksimal — imgly ISNet fp32, ±168 MB</option>
-                <option value="imgly-fp16">Seimbang — imgly ISNet fp16, ±84 MB</option>
-                <option value="imgly-quint8">Ringan — imgly ISNet quint8, ±42 MB</option>
-                <option value="cepat">Cepat — u2netp, ±4 MB</option>
+                <option value="imgly-fp32">{tr('Maksimal', 'Maximum')} — imgly ISNet fp32, ±168 MB</option>
+                <option value="imgly-fp16">{tr('Seimbang', 'Balanced')} — imgly ISNet fp16, ±84 MB</option>
+                <option value="imgly-quint8">{tr('Ringan', 'Light')} — imgly ISNet quint8, ±42 MB</option>
+                <option value="cepat">{tr('Cepat', 'Fast')} — u2netp, ±4 MB</option>
               </select>
             </div>
           </div>
           {resultUrl ? (
             <>
               <div className="removebg-stage">
-                <img src={resultUrl} alt="Hasil hapus latar" className="removebg-canvas" style={previewBg} />
+                <img src={resultUrl} alt={tr('Hasil hapus latar', 'Background removal result')} className="removebg-canvas" style={previewBg} />
               </div>
               <div className="tool-form">{backgroundPicker}</div>
               <button className="primary" onClick={downloadAi} disabled={busy || aiBusy}>
                 {downloadLabel}
               </button>
-              <button className="ghost-btn" onClick={() => { setResultUrl(null); setResultBlob(null); }} disabled={aiBusy}>Proses ulang</button>
+              <button className="ghost-btn" onClick={() => { setResultUrl(null); setResultBlob(null); }} disabled={aiBusy}>{tr('Proses ulang', 'Process again')}</button>
             </>
           ) : (
             <>
               <button className="primary" onClick={runAi} disabled={aiBusy || busy}>
-                {aiBusy ? 'Memproses…' : 'Hapus latar dengan AI →'}
+                {aiBusy ? tr('Memproses…', 'Processing…') : tr('Hapus latar dengan AI →', 'Remove background with AI →')}
               </button>
               {aiBusy && (
-                <div className="status" role="status">{statusText || 'Memproses…'}{elapsed ? ` (${elapsed}s)` : ''}</div>
+                <div className="status" role="status">{statusText || tr('Memproses…', 'Processing…')}{elapsed ? ` (${elapsed}s)` : ''}</div>
               )}
             </>
           )}
@@ -258,34 +258,34 @@ export function RemoveBgPanel({ bytes, onProcess, busy }: RemoveBgPanelProps) {
           </div>
           <div className="tool-form">
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="rb-color">Warna latar asli yang dihapus</label>
+              <label className="tool-form-label" htmlFor="rb-color">{tr('Warna latar asli yang dihapus', 'Original background color to remove')}</label>
               <div className="removebg-color-row">
                 <input id="rb-color" type="color" value={refColor} disabled={busy} onChange={(e) => setRefColor(e.target.value)} />
                 <button type="button" className="ghost-btn" disabled={busy} onClick={() => {
                   const d = imageDataRef.current;
                   if (d) setRefColor(rgbHex(cornerColor(d.data, d.width, d.height)));
-                }}>Deteksi ulang dari sudut</button>
+                }}>{tr('Deteksi ulang dari sudut', 'Re-detect from corners')}</button>
               </div>
             </div>
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="rb-tol">Toleransi: {tolerance}</label>
+              <label className="tool-form-label" htmlFor="rb-tol">{tr('Toleransi', 'Tolerance')}: {tolerance}</label>
               <input id="rb-tol" type="range" min={0} max={120} step={1} value={tolerance} disabled={busy} onChange={(e) => setTolerance(Number(e.target.value))} />
             </div>
             <div className="tool-form-field">
-              <label className="tool-form-label" htmlFor="rb-soft">Kelembutan tepi: {softness}</label>
+              <label className="tool-form-label" htmlFor="rb-soft">{tr('Kelembutan tepi', 'Edge softness')}: {softness}</label>
               <input id="rb-soft" type="range" min={0} max={80} step={1} value={softness} disabled={busy} onChange={(e) => setSoftness(Number(e.target.value))} />
             </div>
             <div className="tool-form-field">
               <label className="tool-form-label" htmlFor="rb-mode">Mode</label>
               <select id="rb-mode" className="tool-form-input" value={keyMode} disabled={busy} onChange={(e) => setKeyMode(e.target.value as 'edges' | 'global')}>
-                <option value="edges">Dari tepi (objek sewarna di tengah tetap aman)</option>
-                <option value="global">Semua piksel serupa</option>
+                <option value="edges">{tr('Dari tepi (objek sewarna di tengah tetap aman)', 'From the edges (same-colored subject in the middle stays safe)')}</option>
+                <option value="global">{tr('Semua piksel serupa', 'All similar pixels')}</option>
               </select>
             </div>
             {backgroundPicker}
           </div>
           <button className="primary" onClick={downloadSolid} disabled={busy || !solidReady}>
-            {busy ? 'Memproses…' : downloadLabel}
+            {busy ? tr('Memproses…', 'Processing…') : downloadLabel}
           </button>
         </>
       )}

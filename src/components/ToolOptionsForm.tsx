@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { tr } from '../lib/i18n';
 
 export type Field =
   | { name: string; label: string; type: 'text'; default?: string; placeholder?: string }
@@ -61,7 +62,7 @@ export function ToolOptionsForm({ fields, onProcess, busy, submitLabel, secondar
         {children}
       </div>
       <button className="primary" onClick={() => onProcess(values)} disabled={busy}>
-        {busy ? 'Memproses…' : submitLabel}
+        {busy ? tr('Memproses…', 'Processing…') : submitLabel}
       </button>
       {secondaryLabel && onSecondary && (
         <button className="ghost-btn" onClick={() => onSecondary(values)} disabled={busy}>

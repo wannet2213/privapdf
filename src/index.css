@@ -158,6 +158,9 @@ footer {
   font-weight: 600;
 }
 footer span:last-child { color: var(--ink); font-weight: 700; }
+footer a, .prose a { text-decoration: underline; text-underline-offset: 3px; }
+footer a:hover, .prose a:hover { color: var(--accent-hover); }
+.prose li { font-size: 15.5px; line-height: 1.7; font-weight: 600; color: var(--ink-muted); }
 
 /* ============================================
    Home

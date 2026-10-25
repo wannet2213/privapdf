@@ -7,6 +7,7 @@ import {
 import fontkit from '@pdf-lib/fontkit';
 import { parseOps, spliceOps, type Op } from '../lib/content-stream';
 import { rewriteReachable, prunePageResources, dictAt, arrayAt } from './pdf-native';
+import { tr } from '../lib/i18n';
 
 export interface TextEdit {
   page: number;
@@ -259,7 +260,7 @@ function covers(file: Uint8Array, text: string): boolean {
   }
 }
 
-const OCR_ONLY = 'Baris ini teks OCR tak terlihat di atas gambar scan: gambarnya tidak bisa diedit, jadi nilai lama tetap terlihat. Untuk menutup data di scan, pakai Sensor PDF.';
+const OCR_ONLY = tr('Baris ini teks OCR tak terlihat di atas gambar scan: gambarnya tidak bisa diedit, jadi nilai lama tetap terlihat. Untuk menutup data di scan, pakai Sensor PDF.', 'This line is invisible OCR text over a scanned image: the image cannot be edited, so the old value stays visible. To cover data on a scan, use Redact PDF.');
 // Pembawa teks pengganti yang tetap memuat teks lama setelah glyph-nya dihapus.
 const ALT_TEXT_KEYS = ['ActualText', 'Alt', 'E'];
 
